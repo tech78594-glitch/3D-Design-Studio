@@ -1,0 +1,6 @@
+{
+  "name": "3D Design Studio",
+  "description": "Professional 3D CAD design studio featuring Technology & Device modeling with Real-time PBR Review, Component Hierarchy Tree, Assembly Constraints, Holographic Exploded Views, Smart Assembly Auto Align, Clash Detection System, Kinematic Motion Player, CAD Layers & Tagging, Design Analytics Dashboard, Design Versioning, Bill of Materials (BOM) Report Export, 3D Measuring Tool Calipers, Collaborative 3D Comments Markup, and Studio Dark/Light/Blueprint Theme Modes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
