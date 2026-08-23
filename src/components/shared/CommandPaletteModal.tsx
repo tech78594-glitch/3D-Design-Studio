@@ -48,6 +48,8 @@ import {
   FolderArchive,
   Keyboard,
   PenTool,
+  Move3d,
+  Scale,
 } from 'lucide-react';
 
 export interface CommandItem {
@@ -101,6 +103,7 @@ interface CommandPaletteModalProps {
   onOpenBatchExport?: () => void;
   onOpenHotkeyLegend?: () => void;
   onOpenSketchAnnotation?: () => void;
+  onOpenARPreview?: () => void;
   onLoadPreset: (presetKey: string) => void;
   onExportSTL: () => void;
   onExportOBJ: () => void;
@@ -142,6 +145,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
   onOpenBatchExport,
   onOpenHotkeyLegend,
   onOpenSketchAnnotation,
+  onOpenARPreview,
   onLoadPreset,
   onExportSTL,
   onExportOBJ,
@@ -394,6 +398,19 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
         action: () => {
           onClose();
           onOpenSketchAnnotation?.();
+        },
+      },
+      {
+        id: 'tool_ar_preview',
+        category: 'tools',
+        title: 'AR Preview & Spatial Placement Studio',
+        subtitle: 'Live camera pass-through, real-world 1:1 scale alignment, contact shadows, mobile QR',
+        badge: 'AR',
+        shortcut: 'R',
+        icon: <Move3d className="w-4 h-4 text-sky-400" />,
+        action: () => {
+          onClose();
+          onOpenARPreview?.();
         },
       }
     );

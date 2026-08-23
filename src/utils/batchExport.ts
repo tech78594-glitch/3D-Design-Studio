@@ -5,6 +5,7 @@
 
 import JSZip from 'jszip';
 import { CADObject, BatchExportConfig, CADMaterial } from '../types/cad';
+import { exportSceneTo3MF } from './cadEngine';
 
 // Generates an ASCII STL representation of a CADObject
 export function generateAsciiSTL(object: CADObject, scaleMultiplier = 1.0): string {
@@ -222,6 +223,13 @@ export async function executeBatchExport(
     if (config.formats.includes('cad_json')) {
       updateProgress(`Exporting JSON schema for ${obj.name}...`);
       folder.file(`${cleanName}_schema.json`, JSON.stringify(obj, null, 2));
+    }
+
+    // Format: 3MF Package
+    if (config.formats.includes('cad_3mf')) {
+      updateProgress(`Compiling 3MF Package for ${obj.name}...`);
+      const blob3mf = await exportSceneTo3MF([obj], obj.name);
+      folder.file(`${cleanName}.3mf`, blob3mf);
     }
   }
 

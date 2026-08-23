@@ -177,6 +177,13 @@ const DEFAULT_HOTKEYS: HotkeyItem[] = [
     category: 'tools',
   },
   {
+    id: 'hk_ar_preview_modal',
+    keys: ['Alt', 'A'],
+    description: 'Launch AR Preview & Real-World Spatial Studio Mode',
+    category: 'tools',
+    contextNote: 'Live camera pass-through & 1:1 true scale',
+  },
+  {
     id: 'hk_legend_modal',
     keys: ['?'],
     description: 'Open Keyboard Shortcuts Cheatsheet',

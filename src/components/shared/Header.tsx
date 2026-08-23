@@ -7,7 +7,7 @@ import {
   CADObject,
   StudioThemeMode,
 } from '../../types/cad';
-import { exportSceneToSTL, exportSceneToOBJ } from '../../utils/cadEngine';
+import { exportSceneToSTL, exportSceneToOBJ, exportSceneTo3MF } from '../../utils/cadEngine';
 import {
   Cpu,
   Building2,
@@ -48,6 +48,9 @@ import {
   Keyboard,
   PenTool,
   HelpCircle,
+  Move3d,
+  Scale,
+  Sparkles,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { QuickTooltip } from './QuickTooltip';
@@ -95,6 +98,11 @@ interface HeaderProps {
   onOpenHotkeyLegend?: () => void;
   onOpenSketchAnnotation?: () => void;
   isSketchAnnotationOpen?: boolean;
+  onOpenARPreview?: () => void;
+  isARPreviewOpen?: boolean;
+  onOpenMassCalculator?: () => void;
+  onToggleEdgeSelection?: () => void;
+  isEdgeSelectionActive?: boolean;
   autoSaveTime?: number | null;
   isAutoSaving?: boolean;
   onForceSave?: () => void;
@@ -149,6 +157,11 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenHotkeyLegend,
   onOpenSketchAnnotation,
   isSketchAnnotationOpen = false,
+  onOpenARPreview,
+  isARPreviewOpen = false,
+  onOpenMassCalculator,
+  onToggleEdgeSelection,
+  isEdgeSelectionActive = false,
   autoSaveTime = null,
   isAutoSaving = false,
   onForceSave,
@@ -184,6 +197,20 @@ export const Header: React.FC<HeaderProps> = ({
     link.click();
     setIsExportMenuOpen(false);
     confetti({ particleCount: 40, spread: 60, origin: { y: 0.1 } });
+  };
+
+  const handleExport3MF = async () => {
+    try {
+      const blob = await exportSceneTo3MF(objects, `${section}_Assembly`);
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `${section}_assembly_${Date.now()}.3mf`;
+      link.click();
+      setIsExportMenuOpen(false);
+      confetti({ particleCount: 45, spread: 65, origin: { y: 0.1 } });
+    } catch (err) {
+      console.error('Error generating 3MF export:', err);
+    }
   };
 
   const handleExportJSON = () => {
@@ -570,6 +597,64 @@ export const Header: React.FC<HeaderProps> = ({
           </QuickTooltip>
         )}
 
+        {/* AR Preview & Spatial Studio Button */}
+        {onOpenARPreview && (
+          <QuickTooltip content="AR Preview & Real-World Spatial Mode" shortcut="R">
+            <button
+              id="btn_header_ar_preview"
+              onClick={onOpenARPreview}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all border shadow-sm ${
+                isARPreviewOpen
+                  ? 'bg-sky-500/20 border-sky-500/60 text-sky-300 ring-1 ring-sky-500/50'
+                  : isLight
+                  ? 'bg-sky-50 hover:bg-sky-100 border-sky-300 text-sky-700 shadow-sm'
+                  : 'bg-sky-950/40 hover:bg-sky-900/50 border-sky-500/40 text-sky-300 hover:text-sky-200'
+              }`}
+            >
+              <Move3d className="w-3.5 h-3.5 text-sky-400 animate-pulse" />
+              <span className="hidden xl:inline">AR Preview</span>
+            </button>
+          </QuickTooltip>
+        )}
+
+        {/* Real-Time Mass Calculator Button */}
+        {onOpenMassCalculator && (
+          <QuickTooltip content="Real-Time Mass, CoG & Inertia Calculator" shortcut="M">
+            <button
+              id="btn_header_mass_calc"
+              onClick={onOpenMassCalculator}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all border shadow-sm ${
+                isLight
+                  ? 'bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-800'
+                  : 'bg-amber-950/30 hover:bg-amber-900/40 border-amber-500/40 text-amber-300 hover:text-amber-200'
+              }`}
+            >
+              <Scale className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden xl:inline">Mass Calc</span>
+            </button>
+          </QuickTooltip>
+        )}
+
+        {/* Smart Edge Selection Mode Toggle Button */}
+        {onToggleEdgeSelection && (
+          <QuickTooltip content="Smart Edge Selection & Fillet/Chamfer Inspector" shortcut="E">
+            <button
+              id="btn_header_smart_edge"
+              onClick={onToggleEdgeSelection}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all border shadow-sm ${
+                isEdgeSelectionActive
+                  ? 'bg-cyan-500/20 border-cyan-500/60 text-cyan-300 ring-1 ring-cyan-500/50'
+                  : isLight
+                  ? 'bg-cyan-50 hover:bg-cyan-100 border-cyan-300 text-cyan-800'
+                  : 'bg-cyan-950/30 hover:bg-cyan-900/40 border-cyan-500/40 text-cyan-300 hover:text-cyan-200'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="hidden xl:inline">Smart Edges</span>
+            </button>
+          </QuickTooltip>
+        )}
+
         {/* Snapshot Studio Button */}
         {onOpenSnapshotStudio && (
           <QuickTooltip content="High-Res Snapshot Gallery" shortcut="4K">
@@ -899,6 +984,20 @@ export const Header: React.FC<HeaderProps> = ({
                 <div>
                   <div className="font-semibold text-zinc-100">Export OBJ Mesh</div>
                   <div className="text-[10px] text-zinc-400">For Blender, CAD & Rhino</div>
+                </div>
+              </button>
+
+              <button
+                onClick={handleExport3MF}
+                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-zinc-800/80 text-zinc-200 transition-colors text-left font-medium bg-amber-950/20 border border-amber-500/30"
+              >
+                <Box className="w-4 h-4 text-amber-400" />
+                <div>
+                  <div className="font-semibold text-amber-300 flex items-center gap-1.5">
+                    <span>Export 3MF Package</span>
+                    <span className="text-[9px] px-1 py-0.2 bg-amber-500/20 text-amber-300 rounded font-bold">NEW</span>
+                  </div>
+                  <div className="text-[10px] text-zinc-400">Bambu, Prusa, Cura, Fusion 360</div>
                 </div>
               </button>
 

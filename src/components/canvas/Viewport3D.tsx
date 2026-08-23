@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import * as THREE from 'three';
 import {
   CADObject,
@@ -14,8 +14,21 @@ import {
   CADMeasurement,
   CADCommentPin,
   StudioThemeMode,
+  CADEdge,
+  ExplodedTrailsSettings,
 } from '../../types/cad';
 import { createCADGeometry, createCADMaterial } from '../../utils/cadEngine';
+import {
+  extractSceneEdges,
+  pickNearestEdge,
+  createEdgeSelectionVisuals,
+  findConnectedEdgeLoop,
+} from '../../utils/edgeSelection';
+import {
+  generateExplodedTrails,
+  createExplodedTrailsGroup,
+  DEFAULT_EXPLODED_TRAILS_SETTINGS,
+} from '../../utils/explodedTrails';
 import {
   Camera,
   RotateCcw,
@@ -69,6 +82,12 @@ interface Viewport3DProps {
   ) => void;
   onRestoreCameraState?: (camState: any) => void;
   onUpdateStarkPartOffset?: (id: string, offset: [number, number, number] | null) => void;
+  // Exploded Trails & Smart Edge Selection Props
+  isEdgeSelectionMode?: boolean;
+  selectedEdges?: CADEdge[];
+  onSelectEdge?: (edge: CADEdge | null, edgeLoop?: CADEdge[]) => void;
+  showExplodedTrails?: boolean;
+  explodedTrailsSettings?: ExplodedTrailsSettings;
 }
 
 export const Viewport3D: React.FC<Viewport3DProps> = ({
@@ -93,6 +112,11 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
   onOpenMeasuringTool,
   onOpenCommentsModal,
   onRegisterSnapshotCapture,
+  isEdgeSelectionMode = false,
+  selectedEdges = [],
+  onSelectEdge,
+  showExplodedTrails = true,
+  explodedTrailsSettings = DEFAULT_EXPLODED_TRAILS_SETTINGS,
 }) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -104,8 +128,13 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
   const selectionHelperRef = useRef<THREE.BoxHelper | null>(null);
   const slicePlaneRef = useRef<THREE.Plane | null>(null);
   const starkLinesGroupRef = useRef<THREE.Group | null>(null);
+  const explodedTrailsGroupRef = useRef<THREE.Group | null>(null);
+  const edgeVisualsGroupRef = useRef<THREE.Group | null>(null);
   const measurementsGroupRef = useRef<THREE.Group | null>(null);
   const commentsGroupRef = useRef<THREE.Group | null>(null);
+
+  // Hovered edge for smart selection
+  const [hoveredEdge, setHoveredEdge] = useState<CADEdge | null>(null);
 
   // Orbit navigation state
   const isDraggingRef = useRef(false);
@@ -279,6 +308,16 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     const starkLinesGroup = new THREE.Group();
     scene.add(starkLinesGroup);
     starkLinesGroupRef.current = starkLinesGroup;
+
+    // Interactive Exploded Assembly Trails Group
+    const explodedTrailsGroup = new THREE.Group();
+    scene.add(explodedTrailsGroup);
+    explodedTrailsGroupRef.current = explodedTrailsGroup;
+
+    // Smart Edge Selection & Feature Highlighting Group
+    const edgeVisualsGroup = new THREE.Group();
+    scene.add(edgeVisualsGroup);
+    edgeVisualsGroupRef.current = edgeVisualsGroup;
 
     // 3D Measurement Visual Calipers Group
     const measurementsGroup = new THREE.Group();
@@ -725,6 +764,61 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     pbrSettings,
   ]);
 
+  // Extract Scene Edges for Smart Edge Selection Mode
+  const extractedSceneEdges = useMemo(() => {
+    if (!isEdgeSelectionMode) return [];
+    return extractSceneEdges(objects, 24);
+  }, [objects, isEdgeSelectionMode]);
+
+  // Render Interactive Exploded Trails
+  useEffect(() => {
+    const group = explodedTrailsGroupRef.current;
+    if (!group) return;
+
+    while (group.children.length > 0) {
+      const child = group.children[0];
+      group.remove(child);
+    }
+
+    if (section === 'technology' && showExplodedTrails) {
+      const trails = generateExplodedTrails(objects, deviceConfig, explodedTrailsSettings);
+      if (trails.length > 0) {
+        const visualTrailsGroup = createExplodedTrailsGroup(trails, explodedTrailsSettings);
+        while (visualTrailsGroup.children.length > 0) {
+          const c = visualTrailsGroup.children[0];
+          group.add(c);
+        }
+      }
+    }
+  }, [
+    objects,
+    section,
+    showExplodedTrails,
+    explodedTrailsSettings,
+    deviceConfig.explodedAmount,
+    deviceConfig.starkSeparationAmount,
+    deviceConfig.starkModeEnabled,
+  ]);
+
+  // Render Smart Edge Selection Highlights
+  useEffect(() => {
+    const group = edgeVisualsGroupRef.current;
+    if (!group) return;
+
+    while (group.children.length > 0) {
+      const child = group.children[0];
+      group.remove(child);
+    }
+
+    if (isEdgeSelectionMode) {
+      const visuals = createEdgeSelectionVisuals(selectedEdges, hoveredEdge);
+      while (visuals.children.length > 0) {
+        const c = visuals.children[0];
+        group.add(c);
+      }
+    }
+  }, [isEdgeSelectionMode, selectedEdges, hoveredEdge]);
+
   // Render 3D Measurement Visual Calipers in Scene
   useEffect(() => {
     const group = measurementsGroupRef.current;
@@ -913,6 +1007,32 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
         -((e.clientY - rect.top) / rect.height) * 2 + 1
       );
 
+      // Smart Edge Selection picking
+      if (isEdgeSelectionMode && extractedSceneEdges.length > 0) {
+        const mouseCanvasPos = {
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top,
+        };
+        const hitEdge = pickNearestEdge(
+          mouseCanvasPos,
+          extractedSceneEdges,
+          cameraRef.current,
+          rect.width,
+          rect.height,
+          18
+        );
+        if (hitEdge) {
+          let loop: CADEdge[] = [];
+          if (e.shiftKey) {
+            loop = findConnectedEdgeLoop(hitEdge, extractedSceneEdges);
+          }
+          if (onSelectEdge) {
+            onSelectEdge(hitEdge, loop.length > 0 ? loop : [hitEdge]);
+          }
+          return;
+        }
+      }
+
       const raycaster = new THREE.Raycaster();
       raycaster.setFromCamera(mouse, cameraRef.current);
 
@@ -983,7 +1103,25 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isDraggingRef.current) return;
+    if (!isDraggingRef.current) {
+      if (isEdgeSelectionMode && mountRef.current && cameraRef.current && extractedSceneEdges.length > 0) {
+        const rect = mountRef.current.getBoundingClientRect();
+        const mouseCanvasPos = {
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top,
+        };
+        const nearest = pickNearestEdge(
+          mouseCanvasPos,
+          extractedSceneEdges,
+          cameraRef.current,
+          rect.width,
+          rect.height,
+          16
+        );
+        setHoveredEdge(nearest);
+      }
+      return;
+    }
 
     const deltaX = e.clientX - previousMousePositionRef.current.x;
     const deltaY = e.clientY - previousMousePositionRef.current.y;

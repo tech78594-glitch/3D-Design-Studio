@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import JSZip from 'jszip';
 import { CADObject, RenderMode, CADMaterial } from '../types/cad';
 
 // Cache procedural textures
@@ -498,3 +499,141 @@ export function exportSceneToOBJ(objects: CADObject[]): string {
 
   return objOutput;
 }
+
+/**
+ * 3MF Exporter for Modern 3D Printing (Bambu Studio, PrusaSlicer, Cura, SolidWorks, Fusion 360)
+ * Generates an OPC/ZIP package compliant with 3MF Core Specification (Unit: Millimeters)
+ */
+export async function exportSceneTo3MF(
+  objects: CADObject[],
+  assemblyName: string = 'CAD_Assembly'
+): Promise<Blob> {
+  const zip = new JSZip();
+
+  // 1. [Content_Types].xml
+  const contentTypesXml = `<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/>
+</Types>`;
+  zip.file('[Content_Types].xml', contentTypesXml);
+
+  // 2. _rels/.rels
+  const relsXml = `<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/>
+</Relationships>`;
+  zip.file('_rels/.rels', relsXml);
+
+  // 3. 3D/3dmodel.model
+  let objectResourcesXml = '';
+  let buildItemsXml = '';
+  let colorGroupXml = '';
+  let colorIndex = 0;
+
+  const visibleObjects = objects.filter(o => o.visible);
+  
+  // Build color group
+  const colorMap = new Map<string, number>();
+  visibleObjects.forEach((obj) => {
+    const hex = (obj.material?.color || '#3b82f6').replace('#', '').toUpperCase();
+    const alphaHex = Math.round((obj.material?.opacity ?? 1.0) * 255)
+      .toString(16)
+      .padStart(2, '0')
+      .toUpperCase();
+    const fullHex = `#${hex.slice(0, 6)}${alphaHex}`;
+    if (!colorMap.has(fullHex)) {
+      colorMap.set(fullHex, colorIndex++);
+    }
+  });
+
+  let colorsListXml = '';
+  colorMap.forEach((idx, col) => {
+    colorsListXml += `      <m:color color="${col}"/>\n`;
+  });
+  
+  if (colorMap.size > 0) {
+    colorGroupXml = `    <m:colorgroup id="1">\n${colorsListXml}    </m:colorgroup>\n`;
+  }
+
+  visibleObjects.forEach((obj, objIdx) => {
+    const objectId = objIdx + 2; // IDs > 1 (1 reserved for colorgroup if present)
+    const geom = createCADGeometry(obj);
+    geom.computeVertexNormals();
+
+    const positionAttr = geom.getAttribute('position');
+    const indexAttr = geom.getIndex();
+
+    const euler = new THREE.Euler(obj.rotation[0], obj.rotation[1], obj.rotation[2]);
+    const pos = new THREE.Vector3(obj.position[0], obj.position[1], obj.position[2]);
+    const scale = new THREE.Vector3(obj.scale[0], obj.scale[1], obj.scale[2]);
+    const matrix = new THREE.Matrix4().compose(pos, new THREE.Quaternion().setFromEuler(euler), scale);
+
+    const hex = (obj.material?.color || '#3b82f6').replace('#', '').toUpperCase();
+    const alphaHex = Math.round((obj.material?.opacity ?? 1.0) * 255)
+      .toString(16)
+      .padStart(2, '0')
+      .toUpperCase();
+    const fullHex = `#${hex.slice(0, 6)}${alphaHex}`;
+    const p1ColorIndex = colorMap.get(fullHex) ?? 0;
+
+    let verticesXml = '';
+    const v = new THREE.Vector3();
+    for (let i = 0; i < positionAttr.count; i++) {
+      v.fromBufferAttribute(positionAttr, i).applyMatrix4(matrix);
+      verticesXml += `          <vertex x="${v.x.toFixed(4)}" y="${v.y.toFixed(4)}" z="${v.z.toFixed(4)}"/>\n`;
+    }
+
+    let trianglesXml = '';
+    const numTriangles = indexAttr ? indexAttr.count / 3 : positionAttr.count / 3;
+    for (let i = 0; i < numTriangles; i++) {
+      let v1 = i * 3;
+      let v2 = i * 3 + 1;
+      let v3 = i * 3 + 2;
+
+      if (indexAttr) {
+        v1 = indexAttr.getX(i * 3);
+        v2 = indexAttr.getX(i * 3 + 1);
+        v3 = indexAttr.getX(i * 3 + 2);
+      }
+      trianglesXml += `          <triangle v1="${v1}" v2="${v2}" v3="${v3}" p1="${p1ColorIndex}"/>\n`;
+    }
+
+    const safeName = obj.name.replace(/[<>&"']/g, '');
+    objectResourcesXml += `    <object id="${objectId}" name="${safeName}" pid="1" pindex="${p1ColorIndex}" type="model">
+      <mesh>
+        <vertices>
+${verticesXml}        </vertices>
+        <triangles>
+${trianglesXml}        </triangles>
+      </mesh>
+    </object>\n`;
+
+    buildItemsXml += `    <item objectid="${objectId}"/>\n`;
+  });
+
+  const currentDate = new Date().toISOString().split('T')[0];
+  const safeAssemblyName = assemblyName.replace(/[<>&"']/g, '');
+
+  const modelXml = `<?xml version="1.0" encoding="UTF-8"?>
+<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:m="http://schemas.microsoft.com/3dmanufacturing/material/2015/02">
+  <metadata name="Title">${safeAssemblyName}</metadata>
+  <metadata name="Designer">3D CAD Design Studio</metadata>
+  <metadata name="Application">AI Studio CAD Engine</metadata>
+  <metadata name="CreationDate">${currentDate}</metadata>
+  <resources>
+${colorGroupXml}${objectResourcesXml}  </resources>
+  <build>
+${buildItemsXml}  </build>
+</model>`;
+
+  zip.file('3D/3dmodel.model', modelXml);
+
+  return await zip.generateAsync({
+    type: 'blob',
+    mimeType: 'application/vnd.ms-package.3dmanufacturing-3dmodel+xml',
+    compression: 'DEFLATE',
+    compressionOptions: { level: 6 },
+  });
+}
+

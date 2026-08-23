@@ -55,9 +55,17 @@ import { AutoOrientationModal } from './components/shared/AutoOrientationModal';
 import { BatchExportModal } from './components/shared/BatchExportModal';
 import { HotkeyLegendModal } from './components/shared/HotkeyLegendModal';
 import { SketchAnnotationStudio } from './components/shared/SketchAnnotationStudio';
+import { ARPreviewModal } from './components/shared/ARPreviewModal';
+import { MassCalculatorModal } from './components/shared/MassCalculatorModal';
+import { SmartEdgeInspectorPanel } from './components/shared/SmartEdgeInspectorPanel';
 import { exportSceneToSTL, exportSceneToOBJ } from './utils/cadEngine';
 import { detectAssemblyClashes } from './utils/clashDetection';
 import { createVersionSnapshot } from './utils/versionManager';
+import {
+  CADEdge,
+  ExplodedTrailsSettings,
+} from './types/cad';
+import { DEFAULT_EXPLODED_TRAILS_SETTINGS } from './utils/explodedTrails';
 import {
   useAutoSave,
   loadStudioSession,
@@ -300,6 +308,17 @@ export default function App() {
   const [isBatchExportOpen, setIsBatchExportOpen] = useState(false);
   const [isHotkeyLegendOpen, setIsHotkeyLegendOpen] = useState(false);
   const [isSketchAnnotationOpen, setIsSketchAnnotationOpen] = useState(false);
+  const [isARPreviewOpen, setIsARPreviewOpen] = useState(false);
+  const [isMassCalculatorOpen, setIsMassCalculatorOpen] = useState(false);
+
+  // Smart Edge Selection & Feature Highlighting State
+  const [isEdgeSelectionMode, setIsEdgeSelectionMode] = useState(false);
+  const [selectedEdges, setSelectedEdges] = useState<CADEdge[]>([]);
+  const [isEdgeInspectorOpen, setIsEdgeInspectorOpen] = useState(false);
+
+  // Interactive Exploded Trails Settings State
+  const [showExplodedTrails, setShowExplodedTrails] = useState(true);
+  const [explodedTrailsSettings, setExplodedTrailsSettings] = useState<ExplodedTrailsSettings>(DEFAULT_EXPLODED_TRAILS_SETTINGS);
 
   // Snapshot Exporter Hook Reference
   const snapshotExporterRef = useRef<
@@ -497,7 +516,10 @@ export default function App() {
           setIsAutoOrientationOpen(prev => !prev);
         }
       } else if (e.key === 'a' || e.key === 'A') {
-        if (!e.ctrlKey && !e.metaKey) {
+        if (e.altKey) {
+          e.preventDefault();
+          setIsARPreviewOpen(prev => !prev);
+        } else if (!e.ctrlKey && !e.metaKey) {
           setIsSketchAnnotationOpen(prev => !prev);
         }
       } else if (e.key === 'q' || e.key === 'Q') {
@@ -513,7 +535,10 @@ export default function App() {
           setTransformMode('rotate');
         }
       } else if (e.key === 'r' || e.key === 'R') {
-        if (!e.ctrlKey && !e.metaKey) {
+        if (e.altKey) {
+          e.preventDefault();
+          setIsARPreviewOpen(prev => !prev);
+        } else if (!e.ctrlKey && !e.metaKey) {
           setTransformMode('scale');
         }
       } else if (e.key === '1') {
@@ -763,10 +788,21 @@ export default function App() {
         onOpenBatchExport={() => setIsBatchExportOpen(true)}
         onOpenHotkeyLegend={() => setIsHotkeyLegendOpen(true)}
         onOpenSketchAnnotation={() => setIsSketchAnnotationOpen(true)}
+        onOpenARPreview={() => setIsARPreviewOpen(true)}
+        onOpenMassCalculator={() => setIsMassCalculatorOpen(true)}
+        onToggleEdgeSelection={() => {
+          setIsEdgeSelectionMode(prev => {
+            const next = !prev;
+            if (next) setIsEdgeInspectorOpen(true);
+            return next;
+          });
+        }}
+        isEdgeSelectionActive={isEdgeSelectionMode}
         isAutoOrientationOpen={isAutoOrientationOpen}
         isBatchExportOpen={isBatchExportOpen}
         isHotkeyLegendOpen={isHotkeyLegendOpen}
         isSketchAnnotationOpen={isSketchAnnotationOpen}
+        isARPreviewOpen={isARPreviewOpen}
         onToggleExplodedPlayer={() => setIsExplodedPlayerOpen(prev => !prev)}
         isExplodedPlayerOpen={isExplodedPlayerOpen}
         autoSaveTime={autoSaveState.lastSavedTime}
@@ -882,6 +918,33 @@ export default function App() {
             onRegisterSnapshotCapture={fn => {
               snapshotExporterRef.current = fn;
             }}
+            isEdgeSelectionMode={isEdgeSelectionMode}
+            selectedEdges={selectedEdges}
+            onSelectEdge={(edge, loop) => {
+              if (!edge) {
+                setSelectedEdges([]);
+                return;
+              }
+              const newEdges = loop && loop.length > 0 ? loop : [edge];
+              setSelectedEdges(newEdges);
+              setIsEdgeInspectorOpen(true);
+            }}
+            showExplodedTrails={showExplodedTrails}
+            explodedTrailsSettings={explodedTrailsSettings}
+          />
+
+          {/* Floating Smart Edge Inspector Dock */}
+          <SmartEdgeInspectorPanel
+            isActive={isEdgeSelectionMode && isEdgeInspectorOpen}
+            onToggleActive={active => {
+              setIsEdgeInspectorOpen(active);
+              if (!active) setIsEdgeSelectionMode(false);
+            }}
+            selectedEdges={selectedEdges}
+            onClearSelection={() => setSelectedEdges([])}
+            onSelectLoop={() => {}}
+            onApplyFillet={() => {}}
+            onApplyChamfer={() => {}}
           />
 
           {/* Floating Exploded View Animation Player Dock */}
@@ -914,6 +977,7 @@ export default function App() {
             section={section}
             onOpenMaterialLibrary={() => setIsMaterialModalOpen(true)}
             onOpenAutoOrientation={() => setIsAutoOrientationOpen(true)}
+            onOpenARPreview={() => setIsARPreviewOpen(true)}
           />
         </div>
       </div>
@@ -956,6 +1020,7 @@ export default function App() {
         onOpenBatchExport={() => setIsBatchExportOpen(true)}
         onOpenHotkeyLegend={() => setIsHotkeyLegendOpen(true)}
         onOpenSketchAnnotation={() => setIsSketchAnnotationOpen(true)}
+        onOpenARPreview={() => setIsARPreviewOpen(true)}
         onToggleExplodedPlayer={() => setIsExplodedPlayerOpen(prev => !prev)}
         onUndo={handleUndo}
         onRedo={handleRedo}
@@ -1187,6 +1252,33 @@ export default function App() {
             ? `${deviceConfig.name || 'Hardware'} CAD Model`
             : `${buildingConfig.style} Architectural Design`
         }
+      />
+
+      {/* 9. AR Preview & Real-World Spatial Placement Studio Modal */}
+      <ARPreviewModal
+        isOpen={isARPreviewOpen}
+        onClose={() => setIsARPreviewOpen(false)}
+        objects={currentObjects}
+        assemblyName={
+          section === 'technology'
+            ? `${deviceConfig.name || 'Hardware'} Assembly`
+            : `${buildingConfig.style} BIM Model`
+        }
+        selectedObjectId={selectedObjectId}
+      />
+
+      {/* 10. Real-time Assembly Mass Calculator & Physical Dynamics Modal */}
+      <MassCalculatorModal
+        isOpen={isMassCalculatorOpen}
+        onClose={() => setIsMassCalculatorOpen(false)}
+        objects={currentObjects}
+        assemblyName={
+          section === 'technology'
+            ? `${deviceConfig.name || 'Hardware'} Assembly`
+            : `${buildingConfig.style} Architectural BIM Project`
+        }
+        selectedObjectId={selectedObjectId}
+        onSelectObject={setSelectedObjectId}
       />
     </div>
   );

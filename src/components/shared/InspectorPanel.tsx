@@ -18,6 +18,7 @@ import {
   Sparkles,
   Layers,
   Compass,
+  Move3d,
 } from 'lucide-react';
 
 interface InspectorPanelProps {
@@ -28,6 +29,7 @@ interface InspectorPanelProps {
   section: DesignSection;
   onOpenMaterialLibrary?: () => void;
   onOpenAutoOrientation?: () => void;
+  onOpenARPreview?: () => void;
 }
 
 export const InspectorPanel: React.FC<InspectorPanelProps> = ({
@@ -38,6 +40,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
   section,
   onOpenMaterialLibrary,
   onOpenAutoOrientation,
+  onOpenARPreview,
 }) => {
   if (!selectedObject) {
     return (
@@ -152,6 +155,15 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
 
         {/* Action icons: Vis, Lock, Copy, Delete */}
         <div className="flex items-center gap-1 shrink-0">
+          {onOpenARPreview && (
+            <button
+              onClick={onOpenARPreview}
+              className="p-1 text-zinc-400 hover:text-sky-400 rounded hover:bg-zinc-800 transition-colors"
+              title="Preview in AR Spatial Mode"
+            >
+              <Move3d className="w-3.5 h-3.5" />
+            </button>
+          )}
           {onOpenAutoOrientation && (
             <button
               onClick={onOpenAutoOrientation}

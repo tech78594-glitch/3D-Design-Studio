@@ -638,7 +638,7 @@ export interface AutoOrientationReport {
 }
 
 // ================= BATCH EXPORT SYSTEM =================
-export type BatchExportFormat = 'stl_ascii' | 'stl_binary' | 'obj_mtl' | 'cad_json' | 'step_wireframe' | 'gltf_manifest';
+export type BatchExportFormat = 'stl_ascii' | 'stl_binary' | 'obj_mtl' | 'cad_json' | 'cad_3mf' | 'step_wireframe' | 'gltf_manifest';
 export type BatchPartGrouping = 'individual_files' | 'by_layer_folders' | 'by_material_folders' | 'single_combined_mesh';
 export type BatchNamingPattern = '{name}' | '{name}_{material}' | '{category}_{name}' | '{layer}_{name}' | '{index}_{name}';
 
@@ -711,6 +711,136 @@ export interface SketchAnnotationLayer {
   strokes: SketchStroke[];
   createdAt: number;
 }
+
+// ================= AR PREVIEW & SPATIAL PLACEMENT =================
+export type ARBackgroundSource = 'live_camera' | 'workbench' | 'office_desk' | 'studio_pedestal' | 'dark_concrete';
+export type ARShadowMode = 'contact_shadow' | 'ambient_occlusion' | 'off';
+
+export interface ARPreviewSettings {
+  backgroundSource: ARBackgroundSource;
+  scalePercent: number; // 100 = 1:1 true scale
+  isTrueScaleLocked: boolean;
+  elevationMm: number;
+  rotationY: number; // in degrees
+  rotationX: number;
+  explodeFactor: number;
+  showReticle: boolean;
+  showDimensionsBadge: boolean;
+  showHologramScanGrid: boolean;
+  shadowIntensity: number;
+  ambientLightIntensity: number;
+  renderFilter: 'standard' | 'thermal' | 'xray' | 'clay' | 'wireframe';
+  autoRotateTurntable: boolean;
+  cameraFacing: 'environment' | 'user';
+}
+
+// ================= MASS & PHYSICAL PROPERTIES CALCULATOR =================
+export interface InertiaTensor {
+  Ixx: number;
+  Iyy: number;
+  Izz: number;
+  Ixy: number;
+  Iyz: number;
+  Izx: number;
+}
+
+export interface PartMassItem {
+  id: string;
+  name: string;
+  category?: string;
+  materialName: string;
+  densityGcm3: number; // g / cm^3
+  volumeCm3: number;   // cm^3
+  massGrams: number;   // g
+  surfaceAreaCm2: number;
+  centerOfGravity: [number, number, number]; // [x, y, z] in mm
+  costUsd: number;
+  percentageOfTotal: number;
+  isCustomDensity?: boolean;
+}
+
+export interface CADMassProperties {
+  totalMassGrams: number;
+  totalMassKg: number;
+  totalMassLbs: number;
+  totalVolumeCm3: number;
+  totalSurfaceAreaCm2: number;
+  centerOfGravity: [number, number, number]; // [x, y, z] in mm
+  inertiaTensor: InertiaTensor;
+  estimatedMaterialCostUsd: number;
+  parts: PartMassItem[];
+  boundingBoxMm: {
+    width: number;
+    height: number;
+    depth: number;
+  };
+  calculatedAt: number;
+}
+
+export interface MaterialDensityPreset {
+  id: string;
+  name: string;
+  category: 'Metal' | 'Plastic' | 'Composite' | 'Ceramic' | 'Elastomer' | 'Glass';
+  densityGcm3: number;
+  costPerKgUsd: number;
+  yieldStrengthMpa?: number;
+  color: string;
+  description: string;
+}
+
+// ================= EXPLODED TRAILS & ROUTE LINES =================
+export type ExplodedTrailStyle = 'dashed_cad' | 'laser_glow' | 'axis_step' | 'solid_line';
+
+export interface CADExplodedTrail {
+  id: string;
+  partId: string;
+  partName: string;
+  originPoint: [number, number, number];
+  explodedPoint: [number, number, number];
+  offsetVector: [number, number, number];
+  distanceMm: number;
+  color: string;
+  style: ExplodedTrailStyle;
+  visible: boolean;
+  stepAxis?: 'x' | 'y' | 'z';
+}
+
+export interface ExplodedTrailsSettings {
+  enabled: boolean;
+  style: ExplodedTrailStyle;
+  colorPreset: 'cad_blue' | 'laser_cyan' | 'amber_gold' | 'neon_emerald' | 'part_match';
+  dashScale: number;
+  lineWidth: number;
+  showAnchorSpheres: boolean;
+  showDistanceBadges: boolean;
+  showDirectionArrows: boolean;
+  animateFlow: boolean;
+  filterPartId: string | null; // null for all parts
+}
+
+// ================= SMART EDGE SELECTION =================
+export interface CADEdge {
+  id: string;
+  objectId: string;
+  objectName: string;
+  vertexA: [number, number, number];
+  vertexB: [number, number, number];
+  lengthMm: number;
+  midpoint: [number, number, number];
+  edgeType: 'linear' | 'circular_arc' | 'fillet' | 'seam';
+  radiusMm?: number;
+  dihedralAngleDeg?: number;
+  isLoopSegment?: boolean;
+}
+
+export interface SelectedEdgeInfo {
+  edge: CADEdge;
+  adjacentFaceAngle?: number;
+  filletRadiusMm?: number;
+  chamferDistanceMm?: number;
+  chainLengthMm?: number;
+}
+
 
 
 
