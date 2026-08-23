@@ -49,8 +49,23 @@ import { VersionManagerModal } from './components/shared/VersionManagerModal';
 import { BOMExportModal } from './components/shared/BOMExportModal';
 import { MeasuringToolPanel } from './components/shared/MeasuringToolPanel';
 import { CollaborativeCommentsModal } from './components/shared/CollaborativeCommentsModal';
+import { CommandPaletteModal } from './components/shared/CommandPaletteModal';
+import { ExplodedAnimationPlayer } from './components/shared/ExplodedAnimationPlayer';
+import { AutoOrientationModal } from './components/shared/AutoOrientationModal';
+import { BatchExportModal } from './components/shared/BatchExportModal';
+import { HotkeyLegendModal } from './components/shared/HotkeyLegendModal';
+import { SketchAnnotationStudio } from './components/shared/SketchAnnotationStudio';
+import { exportSceneToSTL, exportSceneToOBJ } from './utils/cadEngine';
 import { detectAssemblyClashes } from './utils/clashDetection';
 import { createVersionSnapshot } from './utils/versionManager';
+import {
+  useAutoSave,
+  loadStudioSession,
+  exportBackupJSON,
+  clearAutoSavedSession,
+  AutoSaveData,
+} from './utils/autoSave';
+import confetti from 'canvas-confetti';
 
 export default function App() {
   // Theme state: Dark, Light, Blueprint
@@ -198,105 +213,93 @@ export default function App() {
   ]);
   const [activeMeasureMode, setActiveMeasureMode] = useState<MeasureMode>('point_to_point');
 
-  // 3D Collaborative Spatial Comments State
+  // Collaborative Spatial 3D Comments & Pin Annotations
   const [comments, setComments] = useState<CADCommentPin[]>([
     {
-      id: 'pin_optics_clearance',
-      title: 'Camera Module Bezel Chamfer',
-      text: 'Verify CNC undercut clearance around periscope telephoto lens array to prevent acoustic vibration coupling.',
-      author: 'Sarah Chen (Lead Optics)',
-      authorInitials: 'SC',
-      avatarColor: '#38bdf8',
-      position: [18, 52, 6],
-      targetPartId: 'part_camera_module',
-      targetPartName: 'Optics Camera Array',
-      status: 'open',
-      category: 'tolerance_issue',
+      id: 'comment_init_1',
+      author: 'Lead DFM Engineer',
+      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=80&auto=format&fit=crop&q=80',
+      title: 'Thermal Venting Path Validation',
+      body: 'Verified internal heatsink clearance against graphite vapor chamber. 0.4mm air gap maintained across CNC perimeter.',
+      position: [0, 30, 4.5],
+      normal: [0, 0, 1],
+      targetPartId: 'part_chassis_outer',
+      targetPartName: 'Titanium Perimeter Chassis Frame',
+      category: 'thermal',
+      priority: 'high',
+      status: 'in_review',
       createdAt: new Date(Date.now() - 7200000).toISOString(),
       replies: [
         {
-          id: 'rep_1',
-          author: 'Alex Rivera (Mechanical Lead)',
-          avatarColor: '#10b981',
-          text: 'Chamfer radius increased from 0.8mm to 1.2mm in rev v1.1.0 to ensure 0.25mm gap.',
-          timestamp: new Date(Date.now() - 3600000).toISOString(),
+          id: 'reply_init_1',
+          author: 'CAD Modeler',
+          avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&auto=format&fit=crop&q=80',
+          body: 'Added fillet chamfers to reduce turbulence around the camera module perimeter.',
+          createdAt: new Date(Date.now() - 3600000).toISOString(),
         },
       ],
     },
     {
-      id: 'pin_battery_thermal',
-      title: 'Graphite Thermal Spreader Contact',
-      text: 'Ensure uniform thermal paste contact between high-density Li-Po pouch and CNC aluminum mid-frame.',
-      author: 'Marcus Vance (Thermal Eng)',
-      authorInitials: 'MV',
-      avatarColor: '#f59e0b',
-      position: [0, -10, -2],
-      targetPartId: 'part_battery_cell',
-      targetPartName: 'Li-Po Power Cell',
-      status: 'in_review',
-      category: 'electrical_note',
+      id: 'comment_init_2',
+      author: 'Optics Architect',
+      avatarUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=80&auto=format&fit=crop&q=80',
+      title: 'Periscope Telephoto Lens Z-Height',
+      body: 'Lens bump protrusion capped at 2.4mm above back sapphire plate to ensure table stability when flat.',
+      position: [18, 52, 6],
+      normal: [0, 0, 1],
+      targetPartId: 'part_camera_module',
+      targetPartName: 'Triple Lens Camera & LiDAR Array',
+      category: 'geometry',
+      priority: 'medium',
+      status: 'resolved',
       createdAt: new Date(Date.now() - 14400000).toISOString(),
       replies: [],
     },
   ]);
 
-  // Design Version History State
-  const [versionHistory, setVersionHistory] = useState<DesignVersion[]>(() => {
-    const initialV1 = createVersionSnapshot(
+  // Design Versioning & Revisions
+  const [versionHistory, setVersionHistory] = useState<DesignVersion[]>([
+    createVersionSnapshot(
       DEVICE_PRESETS.smartphone_pro.objects,
-      'v1.0.0',
-      'Initial Baseline Prototype',
-      'Initial assembly architecture with modular OLED, CNC chassis, and multi-lens camera module',
-      'Lead Hardware Architect',
-      'release',
-      ['Initial CAD structural layout', 'Defined standard component interfaces']
-    );
-
-    const initialV2 = createVersionSnapshot(
+      techConstraints,
+      'v1.0.0-PROTOTYPE',
+      'Initial Concept Baseline',
+      'Initial parametric architecture with triple lens camera and monolithic chassis frame.'
+    ),
+    createVersionSnapshot(
       DEVICE_PRESETS.smartphone_pro.objects,
-      'v1.1.0',
-      'Optics & Thermal Optimization',
-      'Refined camera protrusion bevel and optimized battery pouch clearance',
-      'Sarah Chen',
-      'milestone',
-      ['Optimized chassis thermal channel', 'Increased camera bump chamfer radius']
-    );
+      techConstraints,
+      'v1.1.0-THERMAL',
+      'Thermal & Structural Optimization',
+      'Added dual graphite heat spreaders, increased battery cavity tolerance, and refined chamfers.'
+    ),
+  ]);
 
-    return [initialV1, initialV2];
-  });
+  // High-Resolution Snapshot Gallery
+  const [snapshots, setSnapshots] = useState<SnapshotItem[]>([]);
 
-  // Modals state
-  const [isVersionModalOpen, setIsVersionModalOpen] = useState<boolean>(false);
-  const [isBOMModalOpen, setIsBOMModalOpen] = useState<boolean>(false);
-  const [isMeasuringPanelOpen, setIsMeasuringPanelOpen] = useState<boolean>(false);
-  const [isCommentsModalOpen, setIsCommentsModalOpen] = useState<boolean>(false);
-  const [isMaterialModalOpen, setIsMaterialModalOpen] = useState<boolean>(false);
-  const [isSnapshotModalOpen, setIsSnapshotModalOpen] = useState<boolean>(false);
-  const [isPBRModalOpen, setIsPBRModalOpen] = useState<boolean>(false);
-  const [isHoloStudioOpen, setIsHoloStudioOpen] = useState<boolean>(false);
-  const [isAutoAlignOpen, setIsAutoAlignOpen] = useState<boolean>(false);
-  const [isClashModalOpen, setIsClashModalOpen] = useState<boolean>(false);
-  const [isKinematicsOpen, setIsKinematicsOpen] = useState<boolean>(false);
-  const [isLayerTagOpen, setIsLayerTagOpen] = useState<boolean>(false);
-  const [isAnalyticsOpen, setIsAnalyticsOpen] = useState<boolean>(false);
+  // Studio Modals Visibility State
+  const [isMaterialModalOpen, setIsMaterialModalOpen] = useState(false);
+  const [isSnapshotModalOpen, setIsSnapshotModalOpen] = useState(false);
+  const [isPBRModalOpen, setIsPBRModalOpen] = useState(false);
+  const [isHoloStudioOpen, setIsHoloStudioOpen] = useState(false);
+  const [isAutoAlignOpen, setIsAutoAlignOpen] = useState(false);
+  const [isClashModalOpen, setIsClashModalOpen] = useState(false);
+  const [isKinematicsOpen, setIsKinematicsOpen] = useState(false);
+  const [isLayerTagOpen, setIsLayerTagOpen] = useState(false);
+  const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
+  const [isVersionModalOpen, setIsVersionModalOpen] = useState(false);
+  const [isBOMModalOpen, setIsBOMModalOpen] = useState(false);
+  const [isMeasuringPanelOpen, setIsMeasuringPanelOpen] = useState(false);
+  const [isCommentsModalOpen, setIsCommentsModalOpen] = useState(false);
 
-  // Session Snapshots Collection
-  const [snapshots, setSnapshots] = useState<SnapshotItem[]>(() => {
-    try {
-      const saved = localStorage.getItem('cad_snapshots_v1');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('cad_snapshots_v1', JSON.stringify(snapshots));
-    } catch (e) {
-      console.warn('LocalStorage snapshot persist limit:', e);
-    }
-  }, [snapshots]);
+  // New Requested Feature States
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [isExplodedPlayerOpen, setIsExplodedPlayerOpen] = useState(false);
+  const [isAutoOrientationOpen, setIsAutoOrientationOpen] = useState(false);
+  const [isBatchExportOpen, setIsBatchExportOpen] = useState(false);
+  const [isHotkeyLegendOpen, setIsHotkeyLegendOpen] = useState(false);
+  const [isSketchAnnotationOpen, setIsSketchAnnotationOpen] = useState(false);
 
   // Snapshot Exporter Hook Reference
   const snapshotExporterRef = useRef<
@@ -334,6 +337,201 @@ export default function App() {
     setHistory(prev => [...prev.slice(0, historyIndex + 1), step]);
     setHistoryIndex(prev => prev + 1);
   }, [currentObjects, deviceConfig, buildingConfig, historyIndex]);
+
+  // Hook for Debounced Auto-Save Persistence
+  const { autoSaveState, triggerImmediateSave, clearAutoSave } = useAutoSave({
+    techObjects,
+    buildingObjects,
+    deviceConfig,
+    buildingConfig,
+    section,
+    layers,
+    tags,
+    kinematicJoints,
+    techConstraints,
+    measurements,
+    comments,
+    versionHistory,
+    themeMode,
+  });
+
+  // Restore state from auto-saved session data
+  const handleRestoreFromAutoSave = (customData?: AutoSaveData | null) => {
+    const dataToLoad = customData || loadStudioSession();
+    if (!dataToLoad) return;
+
+    if (dataToLoad.techObjects && Array.isArray(dataToLoad.techObjects)) {
+      setTechObjects(dataToLoad.techObjects);
+    }
+    if (dataToLoad.buildingObjects && Array.isArray(dataToLoad.buildingObjects)) {
+      setBuildingObjects(dataToLoad.buildingObjects);
+    }
+    if (dataToLoad.deviceConfig) {
+      setDeviceConfig(dataToLoad.deviceConfig);
+    }
+    if (dataToLoad.buildingConfig) {
+      setBuildingConfig(dataToLoad.buildingConfig);
+    }
+    if (dataToLoad.section) {
+      setSection(dataToLoad.section);
+    }
+    if (dataToLoad.layers && Array.isArray(dataToLoad.layers)) {
+      setLayers(dataToLoad.layers);
+    }
+    if (dataToLoad.tags && Array.isArray(dataToLoad.tags)) {
+      setTags(dataToLoad.tags);
+    }
+    if (dataToLoad.kinematicJoints && Array.isArray(dataToLoad.kinematicJoints)) {
+      setKinematicJoints(dataToLoad.kinematicJoints);
+    }
+    if (dataToLoad.techConstraints && Array.isArray(dataToLoad.techConstraints)) {
+      setTechConstraints(dataToLoad.techConstraints);
+    }
+    if (dataToLoad.measurements && Array.isArray(dataToLoad.measurements)) {
+      setMeasurements(dataToLoad.measurements);
+    }
+    if (dataToLoad.comments && Array.isArray(dataToLoad.comments)) {
+      setComments(dataToLoad.comments);
+    }
+    if (dataToLoad.versionHistory && Array.isArray(dataToLoad.versionHistory)) {
+      setVersionHistory(dataToLoad.versionHistory);
+    }
+    if (dataToLoad.themeMode) {
+      setThemeMode(dataToLoad.themeMode);
+    }
+
+    confetti({ particleCount: 35, spread: 50, origin: { y: 0.1 } });
+    recordHistory();
+  };
+
+  const handleForceSave = () => {
+    triggerImmediateSave();
+    confetti({ particleCount: 20, spread: 40, origin: { y: 0.1 } });
+  };
+
+  const handleClearAutoSave = () => {
+    clearAutoSave();
+  };
+
+  const handleExportBackupFile = () => {
+    exportBackupJSON({
+      techObjects,
+      buildingObjects,
+      deviceConfig,
+      buildingConfig,
+      section,
+      layers,
+      tags,
+      kinematicJoints,
+      techConstraints,
+      measurements,
+      comments,
+      versionHistory,
+      themeMode,
+    });
+  };
+
+  // Global Keyboard Shortcuts Listener
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger shortcuts if typing inside input, textarea or contenteditable
+      const target = e.target as HTMLElement;
+      const isInput =
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable;
+
+      // Cmd+K / Ctrl+K: Quick Commands & Search
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsCommandPaletteOpen(prev => !prev);
+        return;
+      }
+
+      // Cmd+S / Ctrl+S: Quick Save Snapshot
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        handleForceSave();
+        return;
+      }
+
+      // Cmd+E / Ctrl+E: Batch Export
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'e') {
+        e.preventDefault();
+        setIsBatchExportOpen(prev => !prev);
+        return;
+      }
+
+      if (isInput) return;
+
+      // Hotkey Legend: '?'
+      if (e.key === '?') {
+        setIsHotkeyLegendOpen(prev => !prev);
+        return;
+      }
+
+      // Single Key Hotkeys when no input is focused
+      if (e.key === 'v' || e.key === 'V') {
+        if (!e.ctrlKey && !e.metaKey) {
+          setIsVersionModalOpen(prev => !prev);
+        }
+      } else if (e.key === 'b' || e.key === 'B') {
+        if (!e.ctrlKey && !e.metaKey) {
+          setIsBOMModalOpen(prev => !prev);
+        }
+      } else if (e.key === 'm' || e.key === 'M') {
+        if (!e.ctrlKey && !e.metaKey) {
+          setTransformMode(prev => (prev === 'measure' ? 'select' : 'measure'));
+          setIsMeasuringPanelOpen(prev => !prev);
+        }
+      } else if (e.key === 'c' || e.key === 'C') {
+        if (!e.ctrlKey && !e.metaKey) {
+          setIsCommentsModalOpen(prev => !prev);
+        }
+      } else if (e.key === 'g' || e.key === 'G') {
+        if (!e.ctrlKey && !e.metaKey) {
+          setGridVisible(prev => !prev);
+        }
+      } else if (e.key === 'o' || e.key === 'O') {
+        if (!e.ctrlKey && !e.metaKey) {
+          setIsAutoOrientationOpen(prev => !prev);
+        }
+      } else if (e.key === 'a' || e.key === 'A') {
+        if (!e.ctrlKey && !e.metaKey) {
+          setIsSketchAnnotationOpen(prev => !prev);
+        }
+      } else if (e.key === 'q' || e.key === 'Q') {
+        if (!e.ctrlKey && !e.metaKey) {
+          setTransformMode('select');
+        }
+      } else if (e.key === 'w' || e.key === 'W') {
+        if (!e.ctrlKey && !e.metaKey) {
+          setTransformMode('translate');
+        }
+      } else if (e.key === 'e' || e.key === 'E') {
+        if (!e.ctrlKey && !e.metaKey) {
+          setTransformMode('rotate');
+        }
+      } else if (e.key === 'r' || e.key === 'R') {
+        if (!e.ctrlKey && !e.metaKey) {
+          setTransformMode('scale');
+        }
+      } else if (e.key === '1') {
+        setRenderMode('shaded');
+      } else if (e.key === '2') {
+        setRenderMode('wireframe');
+      } else if (e.key === '3') {
+        setRenderMode('xray');
+      } else if (e.key === ' ') {
+        // Spacebar: Toggle Exploded Animation Player
+        e.preventDefault();
+        setIsExplodedPlayerOpen(prev => !prev);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [techObjects, deviceConfig, buildingConfig]);
 
   // Load Preset
   const handleLoadTechPreset = (presetKey: string) => {
@@ -560,6 +758,23 @@ export default function App() {
         onOpenBOMModal={() => setIsBOMModalOpen(true)}
         onOpenMeasuringTool={() => setIsMeasuringPanelOpen(true)}
         onOpenCommentsModal={() => setIsCommentsModalOpen(true)}
+        onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+        onOpenAutoOrientation={() => setIsAutoOrientationOpen(true)}
+        onOpenBatchExport={() => setIsBatchExportOpen(true)}
+        onOpenHotkeyLegend={() => setIsHotkeyLegendOpen(true)}
+        onOpenSketchAnnotation={() => setIsSketchAnnotationOpen(true)}
+        isAutoOrientationOpen={isAutoOrientationOpen}
+        isBatchExportOpen={isBatchExportOpen}
+        isHotkeyLegendOpen={isHotkeyLegendOpen}
+        isSketchAnnotationOpen={isSketchAnnotationOpen}
+        onToggleExplodedPlayer={() => setIsExplodedPlayerOpen(prev => !prev)}
+        isExplodedPlayerOpen={isExplodedPlayerOpen}
+        autoSaveTime={autoSaveState.lastSavedTime}
+        isAutoSaving={autoSaveState.isSaving}
+        onForceSave={handleForceSave}
+        onRestoreAutoSave={() => handleRestoreFromAutoSave()}
+        onClearAutoSave={handleClearAutoSave}
+        onExportBackup={handleExportBackupFile}
         clashCount={assemblyClashes.length}
         versionCount={versionHistory.length}
         commentCount={comments.filter(c => c.status !== 'resolved').length}
@@ -567,7 +782,7 @@ export default function App() {
       />
 
       {/* Main 3-Column Studio Workspace */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden relative">
         {/* Left Side: Major Section (Technology CAD) or Secondary (Building CAD) */}
         <div
           className={`w-80 md:w-96 shrink-0 h-full border-r z-10 overflow-hidden transition-colors ${
@@ -668,6 +883,17 @@ export default function App() {
               snapshotExporterRef.current = fn;
             }}
           />
+
+          {/* Floating Exploded View Animation Player Dock */}
+          {isExplodedPlayerOpen && (
+            <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-30 max-w-2xl w-full px-4 animate-in slide-in-from-bottom-3 duration-200">
+              <ExplodedAnimationPlayer
+                deviceConfig={deviceConfig}
+                onChangeDeviceConfig={updated => setDeviceConfig(prev => ({ ...prev, ...updated }))}
+                onClose={() => setIsExplodedPlayerOpen(false)}
+              />
+            </div>
+          )}
         </div>
 
         {/* Right Side: CAD Properties & Material Inspector Panel */}
@@ -687,9 +913,59 @@ export default function App() {
             onDuplicateObject={handleDuplicateObject}
             section={section}
             onOpenMaterialLibrary={() => setIsMaterialModalOpen(true)}
+            onOpenAutoOrientation={() => setIsAutoOrientationOpen(true)}
           />
         </div>
       </div>
+
+      {/* Global Quick Commands & Search Palette Modal */}
+      <CommandPaletteModal
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        objects={currentObjects}
+        selectedObjectId={selectedObjectId}
+        onSelectObject={setSelectedObjectId}
+        onSelectSection={sec => {
+          setSection(sec);
+          setSelectedObjectId(null);
+        }}
+        section={section}
+        renderMode={renderMode}
+        onChangeRenderMode={setRenderMode}
+        lightingPreset={lightingPreset}
+        onChangeLightingPreset={setLightingPreset}
+        themeMode={themeMode}
+        onChangeThemeMode={setThemeMode}
+        onOpenMaterialLibrary={() => setIsMaterialModalOpen(true)}
+        onOpenSnapshotStudio={() => setIsSnapshotModalOpen(true)}
+        onOpenPBRReview={() => setIsPBRModalOpen(true)}
+        onOpenHolographicStudio={() => setIsHoloStudioOpen(true)}
+        onOpenAutoAlign={() => setIsAutoAlignOpen(true)}
+        onOpenClashDetection={() => setIsClashModalOpen(true)}
+        onOpenKinematics={() => setIsKinematicsOpen(true)}
+        onOpenLayerTagManager={() => setIsLayerTagOpen(true)}
+        onOpenDesignAnalytics={() => setIsAnalyticsOpen(true)}
+        onOpenVersionModal={() => setIsVersionModalOpen(true)}
+        onOpenBOMModal={() => setIsBOMModalOpen(true)}
+        onOpenMeasuringTool={() => {
+          setTransformMode('measure');
+          setIsMeasuringPanelOpen(true);
+        }}
+        onOpenCommentsModal={() => setIsCommentsModalOpen(true)}
+        onOpenAutoOrientation={() => setIsAutoOrientationOpen(true)}
+        onOpenBatchExport={() => setIsBatchExportOpen(true)}
+        onOpenHotkeyLegend={() => setIsHotkeyLegendOpen(true)}
+        onOpenSketchAnnotation={() => setIsSketchAnnotationOpen(true)}
+        onToggleExplodedPlayer={() => setIsExplodedPlayerOpen(prev => !prev)}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        canUndo={historyIndex > 0}
+        canRedo={historyIndex < history.length - 1}
+        onForceSave={handleForceSave}
+        onRestoreAutoSave={() => handleRestoreFromAutoSave()}
+        onLoadTechPreset={handleLoadTechPreset}
+        onLoadBuildingPreset={handleLoadBuildingPreset}
+      />
 
       {/* 1. Design Versioning & Revision History Modal */}
       <VersionManagerModal
@@ -865,6 +1141,52 @@ export default function App() {
           setIsAnalyticsOpen(false);
           setIsSnapshotModalOpen(true);
         }}
+      />
+
+      {/* 5. 3D Print Auto-Orientation & DFM Solver Modal */}
+      <AutoOrientationModal
+        isOpen={isAutoOrientationOpen}
+        onClose={() => setIsAutoOrientationOpen(false)}
+        objects={currentObjects}
+        selectedObjectId={selectedObjectId}
+        onApplyOrientation={(partId, eulerRot) => {
+          setObjectsForCurrentSection(prev =>
+            prev.map(o => (o.id === partId ? { ...o, rotation: eulerRot } : o))
+          );
+          recordHistory();
+        }}
+      />
+
+      {/* 6. Batch CAD Mesh Exporter & ZIP Package Bundler */}
+      <BatchExportModal
+        isOpen={isBatchExportOpen}
+        onClose={() => setIsBatchExportOpen(false)}
+        objects={currentObjects}
+        assemblyName={
+          section === 'technology'
+            ? `${deviceConfig.name || 'Hardware'} Assembly`
+            : `${buildingConfig.style} Architectural BIM Project`
+        }
+        deviceConfig={deviceConfig}
+        buildingConfig={buildingConfig}
+      />
+
+      {/* 7. Hotkey & Keyboard Shortcut Interactive Cheatsheet */}
+      <HotkeyLegendModal
+        isOpen={isHotkeyLegendOpen}
+        onClose={() => setIsHotkeyLegendOpen(false)}
+      />
+
+      {/* 8. 2D/3D Sketch Annotation & Engineering Markup Studio */}
+      <SketchAnnotationStudio
+        isOpen={isSketchAnnotationOpen}
+        onClose={() => setIsSketchAnnotationOpen(false)}
+        objects={currentObjects}
+        assemblyName={
+          section === 'technology'
+            ? `${deviceConfig.name || 'Hardware'} CAD Model`
+            : `${buildingConfig.style} Architectural Design`
+        }
       />
     </div>
   );

@@ -123,7 +123,7 @@ export interface CADObject {
 export interface DeviceConfig {
   id: string;
   name: string;
-  type: 'smartphone' | 'smartwatch' | 'drone' | 'vr_headset' | 'keyboard' | 'iot_hub' | 'custom_device';
+  type: 'smartphone' | 'smartwatch' | 'drone' | 'vr_headset' | 'keyboard' | 'iot_hub' | 'headphones' | 'custom_device';
   description: string;
   dimensions: { width: number; height: number; depth: number; cornerRadius: number; wallThickness: number };
   casingColor: string;
@@ -603,5 +603,114 @@ export interface CADCommentPin {
 
 // ================= THEME MODES =================
 export type StudioThemeMode = 'dark' | 'light' | 'blueprint';
+
+// ================= AUTO-ORIENTATION (DFM & 3D PRINTING) =================
+export type AutoOrientationObjective = 
+  | 'minimal_support' 
+  | 'fastest_print_height' 
+  | 'max_bed_contact' 
+  | 'mechanical_strength'
+  | 'uniform_surface_finish';
+
+export interface OrientationCandidate {
+  id: string;
+  name: string;
+  objective: AutoOrientationObjective;
+  rotationEuler: [number, number, number]; // Radians
+  rotationDeg: [number, number, number];
+  supportVolumeCm3: number;
+  supportMassGrams: number;
+  printTimeHours: number;
+  buildHeightMm: number;
+  bedContactAreaCm2: number;
+  overhangAreaPercent: number;
+  estimatedCostUsd: number;
+  stabilityScore: number; // 0 to 100
+  recommended: boolean;
+}
+
+export interface AutoOrientationReport {
+  partId: string;
+  partName: string;
+  currentDimensionsMm: { x: number; y: number; z: number };
+  candidates: OrientationCandidate[];
+  optimalIndex: number;
+}
+
+// ================= BATCH EXPORT SYSTEM =================
+export type BatchExportFormat = 'stl_ascii' | 'stl_binary' | 'obj_mtl' | 'cad_json' | 'step_wireframe' | 'gltf_manifest';
+export type BatchPartGrouping = 'individual_files' | 'by_layer_folders' | 'by_material_folders' | 'single_combined_mesh';
+export type BatchNamingPattern = '{name}' | '{name}_{material}' | '{category}_{name}' | '{layer}_{name}' | '{index}_{name}';
+
+export interface BatchExportConfig {
+  formats: BatchExportFormat[];
+  grouping: BatchPartGrouping;
+  namingPattern: BatchNamingPattern;
+  includeBOMJson: boolean;
+  includeSpecsTxt: boolean;
+  includeLayersList: boolean;
+  scaleMultiplier: number; // 1.0 = mm, 10.0 = cm, 0.03937 = inch
+  selectedPartsOnly: boolean;
+  activeLayerOnly: boolean;
+  zipArchiveName: string;
+  fileCountEstimate: number;
+  byteSizeEstimate: number;
+}
+
+// ================= HOTKEY LEGEND =================
+export interface HotkeyItem {
+  id: string;
+  keys: string[];
+  description: string;
+  category: 'viewport' | 'modeling' | 'shading' | 'assembly' | 'tools';
+  contextNote?: string;
+}
+
+// ================= SKETCH ANNOTATIONS (2D & 3D MARKUP) =================
+export type SketchToolType = 
+  | 'pen' 
+  | 'arrow' 
+  | 'dimension_leader' 
+  | 'rectangle' 
+  | 'circle' 
+  | 'cloud' 
+  | 'text_note' 
+  | 'stamp';
+
+export type EngineeringStampType = 
+  | 'APPROVED' 
+  | 'REVISE' 
+  | 'TOLERANCE ±0.05' 
+  | 'CRITICAL CLASH' 
+  | 'DFM ISSUE' 
+  | 'SAMPLE OK';
+
+export interface SketchPoint {
+  x: number;
+  y: number;
+}
+
+export interface SketchStroke {
+  id: string;
+  tool: SketchToolType;
+  points: SketchPoint[];
+  color: string;
+  strokeWidth: number;
+  text?: string;
+  stamp?: EngineeringStampType;
+  dimensionMm?: number;
+  isClosed?: boolean;
+  opacity?: number;
+  createdAt: number;
+}
+
+export interface SketchAnnotationLayer {
+  id: string;
+  name: string;
+  visible: boolean;
+  strokes: SketchStroke[];
+  createdAt: number;
+}
+
 
 

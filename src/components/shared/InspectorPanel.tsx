@@ -17,6 +17,7 @@ import {
   Info,
   Sparkles,
   Layers,
+  Compass,
 } from 'lucide-react';
 
 interface InspectorPanelProps {
@@ -26,6 +27,7 @@ interface InspectorPanelProps {
   onDuplicateObject: (obj: CADObject) => void;
   section: DesignSection;
   onOpenMaterialLibrary?: () => void;
+  onOpenAutoOrientation?: () => void;
 }
 
 export const InspectorPanel: React.FC<InspectorPanelProps> = ({
@@ -35,6 +37,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
   onDuplicateObject,
   section,
   onOpenMaterialLibrary,
+  onOpenAutoOrientation,
 }) => {
   if (!selectedObject) {
     return (
@@ -149,6 +152,15 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
 
         {/* Action icons: Vis, Lock, Copy, Delete */}
         <div className="flex items-center gap-1 shrink-0">
+          {onOpenAutoOrientation && (
+            <button
+              onClick={onOpenAutoOrientation}
+              className="p-1 text-zinc-400 hover:text-sky-400 rounded hover:bg-zinc-800 transition-colors"
+              title="Auto-Orient Part for 3D Printing"
+            >
+              <Compass className="w-3.5 h-3.5" />
+            </button>
+          )}
           <button
             onClick={() => onUpdateObject({ ...selectedObject, visible: !selectedObject.visible })}
             className="p-1 text-zinc-400 hover:text-zinc-100 rounded hover:bg-zinc-800 transition-colors"

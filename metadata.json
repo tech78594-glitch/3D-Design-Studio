@@ -1,6 +1,6 @@
 {
   "name": "3D Design Studio",
-  "description": "Professional 3D CAD design studio featuring Technology & Device modeling with Real-time PBR Review, Component Hierarchy Tree, Assembly Constraints, Holographic Exploded Views, Smart Assembly Auto Align, Clash Detection System, Kinematic Motion Player, CAD Layers & Tagging, Design Analytics Dashboard, Design Versioning, Bill of Materials (BOM) Report Export, 3D Measuring Tool Calipers, Collaborative 3D Comments Markup, and Studio Dark/Light/Blueprint Theme Modes.",
+  "description": "Professional 3D CAD design studio featuring Technology & Device modeling with Studio Headphones Pro 3D design, 3D Print Auto-Orientation & DFM Solver, Batch ZIP Mesh & Datasheet Exporter, Interactive Hotkey Legend, 2D/3D Sketch Markup & Annotations, Real-time PBR Review, Component Hierarchy Tree, Assembly Constraints, Holographic Exploded Views, Smart Assembly Auto Align, Clash Detection, Kinematic Motion, CAD Layers & Tagging, Design Analytics, Versioning, BOM Export, 3D Measuring Calipers, and Spatial 3D Comments.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
