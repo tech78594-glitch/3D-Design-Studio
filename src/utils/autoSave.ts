@@ -26,6 +26,38 @@ import {
 export const AUTOSAVE_STORAGE_KEY = 'cad_studio_autosave_v2';
 export const AUTOSAVE_BACKUP_KEY = 'cad_studio_backup_v2';
 
+export const AUTOSAVE_INTERVAL_KEY = 'cad_studio_autosave_interval';
+
+export type AutoSaveIntervalOption = 'off' | '15s' | '30s' | '1m' | '5m' | '10m';
+
+export function getAutoSaveIntervalMs(opt: AutoSaveIntervalOption): number | null {
+  switch (opt) {
+    case '15s': return 15000;
+    case '30s': return 30000;
+    case '1m': return 60000;
+    case '5m': return 300000;
+    case '10m': return 600000;
+    case 'off': return null;
+    default: return 30000;
+  }
+}
+
+export function loadAutoSaveIntervalPref(): AutoSaveIntervalOption {
+  try {
+    const val = localStorage.getItem(AUTOSAVE_INTERVAL_KEY);
+    if (val && ['off', '15s', '30s', '1m', '5m', '10m'].includes(val)) {
+      return val as AutoSaveIntervalOption;
+    }
+  } catch (e) {}
+  return '30s';
+}
+
+export function saveAutoSaveIntervalPref(opt: AutoSaveIntervalOption): void {
+  try {
+    localStorage.setItem(AUTOSAVE_INTERVAL_KEY, opt);
+  } catch (e) {}
+}
+
 export interface AutoSavePayload {
   version: number;
   timestamp: number;

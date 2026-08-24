@@ -51,10 +51,14 @@ import {
   Move3d,
   Scale,
   Sparkles,
+  Mic,
+  Activity,
+  Sliders,
+  Clock,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { QuickTooltip } from './QuickTooltip';
-import { formatTimeAgo } from '../../utils/autoSave';
+import { formatTimeAgo, AutoSaveIntervalOption } from '../../utils/autoSave';
 
 interface HeaderProps {
   section: DesignSection;
@@ -113,6 +117,14 @@ interface HeaderProps {
   versionCount?: number;
   commentCount?: number;
   measurementCount?: number;
+  onOpenExplodedEditor?: () => void;
+  onOpenProjectChat?: () => void;
+  onOpenAutoTexture?: () => void;
+  onOpenPhysicsSim?: () => void;
+  onOpenDesignEngine?: () => void;
+  onOpenVoiceCommand?: () => void;
+  autoSaveIntervalPref?: AutoSaveIntervalOption;
+  onChangeAutoSaveIntervalPref?: (pref: AutoSaveIntervalOption) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -172,6 +184,14 @@ export const Header: React.FC<HeaderProps> = ({
   versionCount = 2,
   commentCount = 0,
   measurementCount = 0,
+  onOpenExplodedEditor,
+  onOpenProjectChat,
+  onOpenAutoTexture,
+  onOpenPhysicsSim,
+  onOpenDesignEngine,
+  onOpenVoiceCommand,
+  autoSaveIntervalPref = '30s',
+  onChangeAutoSaveIntervalPref,
 }) => {
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
@@ -559,22 +579,96 @@ export const Header: React.FC<HeaderProps> = ({
           </QuickTooltip>
         )}
 
-        {/* Sketch Annotations Studio Button */}
-        {onOpenSketchAnnotation && (
-          <QuickTooltip content="2D/3D Sketch Markup & Annotations" shortcut="A">
+        {/* Exploded View Editor Button */}
+        {onOpenExplodedEditor && (
+          <QuickTooltip content="Exploded View & Disassembly Sequence Editor">
             <button
-              id="btn_header_sketch_annotation"
-              onClick={onOpenSketchAnnotation}
+              onClick={onOpenExplodedEditor}
               className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border ${
-                isSketchAnnotationOpen
-                  ? 'bg-sky-500/20 border-sky-500/60 text-sky-300 ring-1 ring-sky-500/50'
-                  : isLight
-                  ? 'bg-white hover:bg-slate-50 border-slate-300 text-slate-700 hover:text-sky-600 shadow-sm'
-                  : 'bg-zinc-950 hover:bg-zinc-900 border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-sky-400'
+                isLight
+                  ? 'bg-white hover:bg-slate-50 border-slate-300 text-slate-700 hover:text-cyan-600 shadow-sm'
+                  : 'bg-zinc-950 hover:bg-zinc-900 border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-cyan-400'
               }`}
             >
-              <PenTool className="w-3.5 h-3.5 text-sky-400" />
-              <span className="hidden xl:inline">Markup</span>
+              <Sliders className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="hidden xl:inline">Explode Editor</span>
+            </button>
+          </QuickTooltip>
+        )}
+
+        {/* Project Collaboration Chat Button */}
+        {onOpenProjectChat && (
+          <QuickTooltip content="Project Team Collaboration Chat">
+            <button
+              onClick={onOpenProjectChat}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                isLight
+                  ? 'bg-white hover:bg-slate-50 border-slate-300 text-slate-700 hover:text-blue-600 shadow-sm'
+                  : 'bg-zinc-950 hover:bg-zinc-900 border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-blue-400'
+              }`}
+            >
+              <MessageSquare className="w-3.5 h-3.5 text-blue-400" />
+              <span className="hidden xl:inline">Team Chat</span>
+            </button>
+          </QuickTooltip>
+        )}
+
+        {/* Automatic Texture Generator Button */}
+        {onOpenAutoTexture && (
+          <QuickTooltip content="AI PBR Texture Generator">
+            <button
+              onClick={onOpenAutoTexture}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                isLight
+                  ? 'bg-white hover:bg-slate-50 border-slate-300 text-slate-700 hover:text-purple-600 shadow-sm'
+                  : 'bg-zinc-950 hover:bg-zinc-900 border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-purple-400'
+              }`}
+            >
+              <Paintbrush className="w-3.5 h-3.5 text-purple-400" />
+              <span className="hidden xl:inline">AI Texture</span>
+            </button>
+          </QuickTooltip>
+        )}
+
+        {/* 3D Physics Simulation Button */}
+        {onOpenPhysicsSim && (
+          <QuickTooltip content="3D Rigid Body Physics Studio">
+            <button
+              onClick={onOpenPhysicsSim}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                isLight
+                  ? 'bg-white hover:bg-slate-50 border-slate-300 text-slate-700 hover:text-emerald-600 shadow-sm'
+                  : 'bg-zinc-950 hover:bg-zinc-900 border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-emerald-400'
+              }`}
+            >
+              <Activity className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden xl:inline">Physics</span>
+            </button>
+          </QuickTooltip>
+        )}
+
+        {/* Generative AI CAD Design Engine Button */}
+        {onOpenDesignEngine && (
+          <QuickTooltip content="Generative AI CAD Design Engine">
+            <button
+              onClick={onOpenDesignEngine}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 rounded-lg text-xs font-semibold transition-all shadow-sm"
+            >
+              <Cpu className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+              <span className="hidden xl:inline">Design Engine</span>
+            </button>
+          </QuickTooltip>
+        )}
+
+        {/* Voice Command Interface Button */}
+        {onOpenVoiceCommand && (
+          <QuickTooltip content="Voice Command Control Interface">
+            <button
+              onClick={onOpenVoiceCommand}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300 rounded-lg text-xs font-semibold transition-all shadow-sm"
+            >
+              <Mic className="w-3.5 h-3.5 text-rose-400" />
+              <span className="hidden xl:inline">Voice Control</span>
             </button>
           </QuickTooltip>
         )}
@@ -768,6 +862,30 @@ export const Header: React.FC<HeaderProps> = ({
                   </div>
                 </button>
               )}
+
+              <div className="p-2 border-t border-zinc-800/80 space-y-1">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 flex items-center justify-between">
+                  <span>Auto-Save Interval</span>
+                  <Clock className="w-3 h-3 text-cyan-400" />
+                </div>
+                <div className="grid grid-cols-3 gap-1">
+                  {(['15s', '30s', '1m', '5m', '10m', 'off'] as const).map(opt => (
+                    <button
+                      key={opt}
+                      onClick={() => {
+                        if (onChangeAutoSaveIntervalPref) onChangeAutoSaveIntervalPref(opt);
+                      }}
+                      className={`px-1.5 py-1 rounded text-[10px] font-mono text-center transition ${
+                        autoSaveIntervalPref === opt
+                          ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/40'
+                          : 'bg-zinc-800/60 text-zinc-400 hover:text-zinc-200'
+                      }`}
+                    >
+                      {opt.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               {onExportBackup && (
                 <button

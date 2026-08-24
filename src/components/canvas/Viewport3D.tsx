@@ -29,6 +29,9 @@ import {
   createExplodedTrailsGroup,
   DEFAULT_EXPLODED_TRAILS_SETTINGS,
 } from '../../utils/explodedTrails';
+import { calculateAssemblyMassProperties } from '../../utils/massCalculator';
+import { LiveUserCursor } from '../../types/collaboration';
+import { CollaborativeLiveCursors } from '../shared/CollaborativeLiveCursors';
 import {
   Camera,
   RotateCcw,
@@ -38,6 +41,8 @@ import {
   Zap,
   Paintbrush,
   MessageSquare,
+  Scale,
+  Sparkles,
 } from 'lucide-react';
 
 interface Viewport3DProps {
@@ -88,6 +93,7 @@ interface Viewport3DProps {
   onSelectEdge?: (edge: CADEdge | null, edgeLoop?: CADEdge[]) => void;
   showExplodedTrails?: boolean;
   explodedTrailsSettings?: ExplodedTrailsSettings;
+  liveCursors?: LiveUserCursor[];
 }
 
 export const Viewport3D: React.FC<Viewport3DProps> = ({
@@ -117,7 +123,12 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
   onSelectEdge,
   showExplodedTrails = true,
   explodedTrailsSettings = DEFAULT_EXPLODED_TRAILS_SETTINGS,
+  liveCursors = [],
 }) => {
+  // Real-time dynamic mass properties calculation
+  const realTimeMassProps = useMemo(() => {
+    return calculateAssemblyMassProperties(objects);
+  }, [objects]);
   const mountRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | THREE.OrthographicCamera | null>(null);
@@ -1402,6 +1413,20 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
           )}
         </div>
       )}
+
+      {/* Collaborative Live Cursors Overlay */}
+      {liveCursors.length > 0 && <CollaborativeLiveCursors cursors={liveCursors} />}
+
+      {/* Real-time Dynamic Mass Viewport Badge */}
+      <div
+        id="realtime_mass_badge"
+        className="absolute top-16 right-3 bg-zinc-900/90 border border-emerald-500/40 text-zinc-200 text-xs px-3 py-1.5 rounded-xl backdrop-blur-md shadow-lg flex items-center gap-2.5 font-mono z-10"
+      >
+        <Scale className="w-3.5 h-3.5 text-emerald-400" />
+        <span>Mass: <strong className="text-emerald-400">{(realTimeMassProps.totalMassGrams / 1000).toFixed(3)} kg</strong> ({realTimeMassProps.totalMassGrams.toFixed(0)}g)</span>
+        <span className="text-zinc-600">|</span>
+        <span className="text-zinc-400">Vol: <strong className="text-zinc-200">{realTimeMassProps.totalVolumeCm3.toFixed(1)} cm³</strong></span>
+      </div>
 
       {/* Iron Man / Stark Hologram Active Indicator */}
       {section === 'technology' && deviceConfig.starkModeEnabled && (

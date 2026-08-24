@@ -58,7 +58,15 @@ import { SketchAnnotationStudio } from './components/shared/SketchAnnotationStud
 import { ARPreviewModal } from './components/shared/ARPreviewModal';
 import { MassCalculatorModal } from './components/shared/MassCalculatorModal';
 import { SmartEdgeInspectorPanel } from './components/shared/SmartEdgeInspectorPanel';
-import { exportSceneToSTL, exportSceneToOBJ } from './utils/cadEngine';
+import { ExplodedViewEditorModal } from './components/shared/ExplodedViewEditorModal';
+import { ProjectCollaborationChatModal } from './components/shared/ProjectCollaborationChatModal';
+import { AutoTextureModal } from './components/shared/AutoTextureModal';
+import { PhysicsSimulationModal } from './components/shared/PhysicsSimulationModal';
+import { DesignEngineModal } from './components/shared/DesignEngineModal';
+import { VoiceCommandInterface } from './components/shared/VoiceCommandInterface';
+import { ChatMessage, LiveUserCursor } from './types/collaboration';
+import { VoiceCommandMatch } from './utils/voiceCommand';
+import { exportSceneToSTL, exportSceneToOBJ, exportSceneTo3MF } from './utils/cadEngine';
 import { detectAssemblyClashes } from './utils/clashDetection';
 import { createVersionSnapshot } from './utils/versionManager';
 import {
@@ -72,6 +80,10 @@ import {
   exportBackupJSON,
   clearAutoSavedSession,
   AutoSaveData,
+  AutoSaveIntervalOption,
+  loadAutoSaveIntervalPref,
+  saveAutoSaveIntervalPref,
+  getAutoSaveIntervalMs,
 } from './utils/autoSave';
 import confetti from 'canvas-confetti';
 
@@ -311,6 +323,61 @@ export default function App() {
   const [isARPreviewOpen, setIsARPreviewOpen] = useState(false);
   const [isMassCalculatorOpen, setIsMassCalculatorOpen] = useState(false);
 
+  // Additional 13 Features Studio States
+  const [isExplodedEditorOpen, setIsExplodedEditorOpen] = useState(false);
+  const [isProjectChatOpen, setIsProjectChatOpen] = useState(false);
+  const [isAutoTextureOpen, setIsAutoTextureOpen] = useState(false);
+  const [isPhysicsSimOpen, setIsPhysicsSimOpen] = useState(false);
+  const [isDesignEngineOpen, setIsDesignEngineOpen] = useState(false);
+  const [isVoiceCommandOpen, setIsVoiceCommandOpen] = useState(false);
+
+  // Auto Save Interval Preference State
+  const [autoSaveIntervalPref, setAutoSaveIntervalPref] = useState<AutoSaveIntervalOption>(loadAutoSaveIntervalPref);
+
+  // Team Collaboration Messages State
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+    {
+      id: 'chat_init_1',
+      author: 'Lead DFM Engineer',
+      avatarColor: '#38bdf8',
+      channel: 'general',
+      text: 'Verified 3MF export specifications and parametric tolerances across all assembly layers.',
+      timestamp: '02:15 PM',
+    },
+    {
+      id: 'chat_init_2',
+      author: 'Optics Architect',
+      avatarColor: '#a78bfa',
+      channel: 'dfm-review',
+      text: 'Triple lens camera module Z-height clearance confirmed at 2.4mm.',
+      timestamp: '02:18 PM',
+    },
+  ]);
+
+  // Collaborative Live Cursors State
+  const [onlineUsers, setOnlineUsers] = useState<LiveUserCursor[]>([
+    {
+      id: 'usr_sarah',
+      name: 'Sarah (DFM)',
+      avatarColor: '#38bdf8',
+      x: 35,
+      y: 42,
+      activeTool: 'Measuring Tool',
+      selectedPartName: 'Titanium Chassis',
+      lastActive: Date.now(),
+    },
+    {
+      id: 'usr_alex',
+      name: 'Alex (Optics)',
+      avatarColor: '#a78bfa',
+      x: 68,
+      y: 28,
+      activeTool: 'PBR Diagnostics',
+      selectedPartName: 'Camera Module',
+      lastActive: Date.now(),
+    },
+  ]);
+
   // Smart Edge Selection & Feature Highlighting State
   const [isEdgeSelectionMode, setIsEdgeSelectionMode] = useState(false);
   const [selectedEdges, setSelectedEdges] = useState<CADEdge[]>([]);
@@ -372,7 +439,13 @@ export default function App() {
     comments,
     versionHistory,
     themeMode,
+    debounceMs: getAutoSaveIntervalMs(autoSaveIntervalPref) || 30000,
   });
+
+  const handleChangeAutoSaveIntervalPref = (pref: AutoSaveIntervalOption) => {
+    setAutoSaveIntervalPref(pref);
+    saveAutoSaveIntervalPref(pref);
+  };
 
   // Restore state from auto-saved session data
   const handleRestoreFromAutoSave = (customData?: AutoSaveData | null) => {
@@ -815,6 +888,14 @@ export default function App() {
         versionCount={versionHistory.length}
         commentCount={comments.filter(c => c.status !== 'resolved').length}
         measurementCount={measurements.length}
+        onOpenExplodedEditor={() => setIsExplodedEditorOpen(true)}
+        onOpenProjectChat={() => setIsProjectChatOpen(true)}
+        onOpenAutoTexture={() => setIsAutoTextureOpen(true)}
+        onOpenPhysicsSim={() => setIsPhysicsSimOpen(true)}
+        onOpenDesignEngine={() => setIsDesignEngineOpen(true)}
+        onOpenVoiceCommand={() => setIsVoiceCommandOpen(true)}
+        autoSaveIntervalPref={autoSaveIntervalPref}
+        onChangeAutoSaveIntervalPref={handleChangeAutoSaveIntervalPref}
       />
 
       {/* Main 3-Column Studio Workspace */}
@@ -921,16 +1002,16 @@ export default function App() {
             isEdgeSelectionMode={isEdgeSelectionMode}
             selectedEdges={selectedEdges}
             onSelectEdge={(edge, loop) => {
-              if (!edge) {
+              if (edge) {
+                setSelectedEdges(loop && loop.length > 0 ? loop : [edge]);
+                setIsEdgeInspectorOpen(true);
+              } else {
                 setSelectedEdges([]);
-                return;
               }
-              const newEdges = loop && loop.length > 0 ? loop : [edge];
-              setSelectedEdges(newEdges);
-              setIsEdgeInspectorOpen(true);
             }}
             showExplodedTrails={showExplodedTrails}
             explodedTrailsSettings={explodedTrailsSettings}
+            liveCursors={onlineUsers}
           />
 
           {/* Floating Smart Edge Inspector Dock */}
@@ -1279,6 +1360,132 @@ export default function App() {
         }
         selectedObjectId={selectedObjectId}
         onSelectObject={setSelectedObjectId}
+      />
+
+      {/* 11. Exploded View & Disassembly Sequence Editor Modal */}
+      <ExplodedViewEditorModal
+        isOpen={isExplodedEditorOpen}
+        onClose={() => setIsExplodedEditorOpen(false)}
+        deviceConfig={deviceConfig}
+        onChangeDeviceConfig={setDeviceConfig}
+        objects={currentObjects}
+        onUpdateObject={handleUpdateObject}
+      />
+
+      {/* 12. Project Collaboration Team Chat Modal */}
+      <ProjectCollaborationChatModal
+        isOpen={isProjectChatOpen}
+        onClose={() => setIsProjectChatOpen(false)}
+        messages={chatMessages}
+        onSendMessage={msg => setChatMessages(prev => [...prev, msg])}
+        objects={currentObjects}
+        onlineUsers={onlineUsers}
+      />
+
+      {/* 13. Automatic AI PBR Texture Generator Modal */}
+      <AutoTextureModal
+        isOpen={isAutoTextureOpen}
+        onClose={() => setIsAutoTextureOpen(false)}
+        selectedObject={selectedObject}
+        onApplyMaterial={(objId, mat) => {
+          const targetObj = currentObjects.find(o => o.id === objId);
+          if (targetObj) {
+            handleUpdateObject({ ...targetObj, material: mat });
+          }
+        }}
+      />
+
+      {/* 14. 3D Rigid Body Physics Simulation Studio Modal */}
+      <PhysicsSimulationModal
+        isOpen={isPhysicsSimOpen}
+        onClose={() => setIsPhysicsSimOpen(false)}
+        objects={currentObjects}
+        onUpdateObjectPositions={transformMap => {
+          setObjectsForCurrentSection(prev =>
+            prev.map(o => {
+              const tr = transformMap.get(o.id);
+              return tr ? { ...o, position: tr.position, rotation: tr.rotation } : o;
+            })
+          );
+        }}
+      />
+
+      {/* 15. Generative AI CAD Design Engine Modal */}
+      <DesignEngineModal
+        isOpen={isDesignEngineOpen}
+        onClose={() => setIsDesignEngineOpen(false)}
+        section={section}
+        onGenerateDesign={newObjects => {
+          setObjectsForCurrentSection(prev => [...prev, ...newObjects]);
+          recordHistory();
+        }}
+      />
+
+      {/* 16. Voice Command Interface Modal */}
+      <VoiceCommandInterface
+        isOpen={isVoiceCommandOpen}
+        onClose={() => setIsVoiceCommandOpen(false)}
+        onExecuteCommand={match => {
+          switch (match.action) {
+            case 'explode':
+              setDeviceConfig(prev => ({
+                ...prev,
+                explodedAmount: prev.explodedAmount > 0.1 ? 0 : 0.8,
+                starkModeEnabled: prev.explodedAmount <= 0.1,
+              }));
+              break;
+            case 'blueprint':
+              setRenderMode('blueprint');
+              setThemeMode('blueprint');
+              break;
+            case 'shaded':
+              setRenderMode('shaded');
+              break;
+            case 'wireframe':
+              setRenderMode('wireframe');
+              break;
+            case 'xray':
+              setRenderMode('xray');
+              break;
+            case 'export_3mf':
+              exportSceneTo3MF(currentObjects, `${section}_Assembly`).then(blob => {
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = `${section}_assembly_${Date.now()}.3mf`;
+                link.click();
+              });
+              break;
+            case 'export_stl':
+              const stlData = exportSceneToSTL(currentObjects);
+              const blob = new Blob([stlData], { type: 'text/plain' });
+              const link = document.createElement('a');
+              link.href = URL.createObjectURL(blob);
+              link.download = `${section}_model_${Date.now()}.stl`;
+              link.click();
+              break;
+            case 'mass_calculator':
+              setIsMassCalculatorOpen(true);
+              break;
+            case 'edge_selection':
+              setIsEdgeSelectionMode(prev => !prev);
+              break;
+            case 'physics_sim':
+              setIsPhysicsSimOpen(true);
+              break;
+            case 'design_engine':
+              setIsDesignEngineOpen(true);
+              break;
+            case 'chat':
+              setIsProjectChatOpen(true);
+              break;
+            case 'auto_texture':
+              setIsAutoTextureOpen(true);
+              break;
+            case 'toggle_grid':
+              setGridVisible(prev => !prev);
+              break;
+          }
+        }}
       />
     </div>
   );
