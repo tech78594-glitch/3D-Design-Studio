@@ -281,14 +281,12 @@ export default function App() {
   const [versionHistory, setVersionHistory] = useState<DesignVersion[]>([
     createVersionSnapshot(
       DEVICE_PRESETS.smartphone_pro.objects,
-      techConstraints,
       'v1.0.0-PROTOTYPE',
       'Initial Concept Baseline',
       'Initial parametric architecture with triple lens camera and monolithic chassis frame.'
     ),
     createVersionSnapshot(
       DEVICE_PRESETS.smartphone_pro.objects,
-      techConstraints,
       'v1.1.0-THERMAL',
       'Thermal & Structural Optimization',
       'Added dual graphite heat spreaders, increased battery cavity tolerance, and refined chamfers.'
