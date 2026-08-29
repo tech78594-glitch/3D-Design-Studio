@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GoogleGenAI } from '@google/genai';
+import { queryHuggingFace, HuggingFaceError } from './huggingface';
 import { CADMaterial, MaterialType } from '../types/cad';
 
 export interface TextureGenerationOptions {
@@ -155,10 +155,10 @@ export function generateProceduralCanvas(
   return canvas;
 }
 
-// Generate PBR Texture via Gemini API or Procedural Fallback
+// Generate PBR Texture via Hugging Face or Procedural Fallback
 export async function generateAutoTexture(
   options: TextureGenerationOptions,
-  apiKey?: string
+  hfToken?: string
 ): Promise<GeneratedTextureResult> {
   const resolution = options.resolution || 512;
   const baseColor = options.colorHex || '#38bdf8';
@@ -187,25 +187,25 @@ export async function generateAutoTexture(
     texturePattern: options.presetStyle === 'carbon' ? 'carbon' : options.presetStyle === 'pcb_grid' ? 'pcb_grid' : 'brushed',
   };
 
-  // If Gemini API Key is available, try enhancing material description or params
-  if (apiKey) {
-    try {
-      const ai = new GoogleGenAI({ apiKey });
-      const model = ai.getGenerativeModel({ model: 'gemini-2.5-flash' });
-      const prompt = `Analyze this CAD material texture request: "${options.prompt}". Suggest optimal PBR roughness (0.0 to 1.0), metalness (0.0 to 1.0), and hex color code. Return valid JSON only with keys roughness, metalness, hexColor.`;
-      const response = await model.generateContent(prompt);
-      const text = response.response.text();
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        if (typeof parsed.roughness === 'number') newMaterial.roughness = parsed.roughness;
-        if (typeof parsed.metalness === 'number') newMaterial.metalness = parsed.metalness;
-        if (typeof parsed.hexColor === 'string' && /^#[0-9A-F]{6}$/i.test(parsed.hexColor)) {
-          newMaterial.color = parsed.hexColor;
-        }
+  // Try enhancing material params via Hugging Face; falls back to the
+  // procedural defaults above on any failure (including no token configured).
+  try {
+    const prompt = `Analyze this CAD material texture request: "${options.prompt}". Suggest optimal PBR roughness (0.0 to 1.0), metalness (0.0 to 1.0), and hex color code. Return valid JSON only with keys roughness, metalness, hexColor.`;
+    const text = await queryHuggingFace(prompt, { token: hfToken || undefined });
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (typeof parsed.roughness === 'number') newMaterial.roughness = parsed.roughness;
+      if (typeof parsed.metalness === 'number') newMaterial.metalness = parsed.metalness;
+      if (typeof parsed.hexColor === 'string' && /^#[0-9A-F]{6}$/i.test(parsed.hexColor)) {
+        newMaterial.color = parsed.hexColor;
       }
-    } catch (e) {
-      console.warn('Gemini AI Texture Enhancement fallback to procedural defaults', e);
+    }
+  } catch (e) {
+    if (e instanceof HuggingFaceError) {
+      console.warn('Hugging Face texture tuning unavailable, using procedural defaults:', e.message);
+    } else {
+      console.warn('AI Texture Enhancement fallback to procedural defaults', e);
     }
   }
 

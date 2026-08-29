@@ -1,26 +1,29 @@
 /**
- * Minimal client for the Hugging Face Inference API.
+ * Minimal client for Hugging Face Inference Providers (the chat-completions
+ * router, not the older api-inference.huggingface.co endpoint).
  *
- * This calls HF directly from the browser, which means the token in
- * VITE_HF_TOKEN is visible to anyone who opens the deployed site
- * (network tab, or the built JS bundle). That's fine for a personal
- * project with a token scoped to "Inference" only — it is NOT fine for
- * a token with write access, or for a paid/rate-limited token you don't
- * want strangers spending. If that matters to you, put this fetch call
- * behind a serverless proxy (Cloudflare Worker, Vercel/Netlify function)
- * that holds the real token server-side instead.
+ * This calls Hugging Face directly from the browser, which means the token
+ * is visible to anyone who opens the deployed site (network tab, or the
+ * built JS bundle). That's fine for a personal project with a token scoped
+ * to "Make calls to Inference Providers" only — it is NOT fine for a token
+ * with write/repo access, or for a paid/rate-limited token you don't want
+ * strangers spending. If that matters to you, put this fetch call behind a
+ * serverless proxy (Cloudflare Worker, Vercel/Netlify function) that holds
+ * the real token server-side instead.
  */
 
 const HF_TOKEN = import.meta.env.VITE_HF_TOKEN as string | undefined;
 const HF_MODEL = import.meta.env.VITE_HF_MODEL as string | undefined;
 
-const HF_INFERENCE_URL = 'https://api-inference.huggingface.co/models';
+const HF_ROUTER_URL = 'https://router.huggingface.co/v1/chat/completions';
 
 export interface HuggingFaceOptions {
-  /** Override the model configured in VITE_HF_MODEL. */
+  /** Override the model configured in VITE_HF_MODEL, e.g. "mistralai/Mistral-7B-Instruct-v0.2". */
   model?: string;
-  /** Extra generation parameters passed through to the model. */
-  parameters?: Record<string, unknown>;
+  /** Override the token configured in VITE_HF_TOKEN (e.g. a token a user pastes in at runtime). */
+  token?: string;
+  /** Sampling temperature passed through to the model. */
+  temperature?: number;
   /** Abort the request after this many ms (default 30000). */
   timeoutMs?: number;
 }
@@ -33,24 +36,24 @@ export class HuggingFaceError extends Error {
 }
 
 /**
- * Send a single text prompt to a Hugging Face model and return its text
- * output. Works with most text-generation / text2text models exposed on
- * the free Inference API.
+ * Send a single text prompt to a Hugging Face chat model (via Inference
+ * Providers) and return its text response.
  */
 export async function queryHuggingFace(
   prompt: string,
   options: HuggingFaceOptions = {}
 ): Promise<string> {
   const model = options.model ?? HF_MODEL;
+  const token = options.token ?? HF_TOKEN;
 
   if (!model) {
     throw new HuggingFaceError(
       'No Hugging Face model configured. Set VITE_HF_MODEL in your .env, or pass { model } explicitly.'
     );
   }
-  if (!HF_TOKEN) {
+  if (!token) {
     throw new HuggingFaceError(
-      'No Hugging Face token configured. Set VITE_HF_TOKEN in your .env.'
+      'No Hugging Face token configured. Set VITE_HF_TOKEN in your .env, or pass { token } explicitly.'
     );
   }
 
@@ -58,18 +61,17 @@ export async function queryHuggingFace(
   const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 30_000);
 
   try {
-    const response = await fetch(`${HF_INFERENCE_URL}/${model}`, {
+    const response = await fetch(HF_ROUTER_URL, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${HF_TOKEN}`,
+        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        inputs: prompt,
-        parameters: options.parameters,
-        // Ask HF to load the model on demand rather than failing
-        // immediately if it isn't warm yet.
-        options: { wait_for_model: true },
+        model,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: options.temperature,
+        stream: false,
       }),
       signal: controller.signal,
     });
@@ -83,13 +85,10 @@ export async function queryHuggingFace(
     }
 
     const data = await response.json();
+    const content = data?.choices?.[0]?.message?.content;
 
-    // Response shape varies by model/task. Handle the common ones.
-    if (Array.isArray(data) && typeof data[0]?.generated_text === 'string') {
-      return data[0].generated_text;
-    }
-    if (typeof data?.generated_text === 'string') {
-      return data.generated_text;
+    if (typeof content === 'string') {
+      return content;
     }
     return JSON.stringify(data);
   } catch (err) {

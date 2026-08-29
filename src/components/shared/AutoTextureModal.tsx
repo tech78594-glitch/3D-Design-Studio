@@ -78,7 +78,7 @@ export const AutoTextureModal: React.FC<AutoTextureModalProps> = ({
               <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
                 Automatic AI PBR Texture Generator
                 <span className="px-2 py-0.5 text-xs bg-purple-500/20 text-purple-300 rounded-full font-mono">
-                  Gemini & Procedural
+                  Hugging Face & Procedural
                 </span>
               </h2>
               <p className="text-xs text-slate-400">
@@ -198,14 +198,14 @@ export const AutoTextureModal: React.FC<AutoTextureModalProps> = ({
             </div>
           </div>
 
-          {/* Optional Gemini API Key */}
+          {/* Optional Hugging Face Token */}
           <div className="space-y-1 pt-2">
-            <label className="text-[11px] text-slate-400">Optional Gemini API Key (for LLM PBR tuning)</label>
+            <label className="text-[11px] text-slate-400">Optional Hugging Face Token (for LLM PBR tuning)</label>
             <input
               type="password"
               value={apiKey}
               onChange={e => setApiKey(e.target.value)}
-              placeholder="AI Key (leave empty for instant local Canvas synthesis)"
+              placeholder="Hugging Face token (leave blank to use the app's configured token, or for instant local Canvas synthesis)"
               className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-300 focus:outline-none focus:border-purple-500 font-mono"
             />
           </div>

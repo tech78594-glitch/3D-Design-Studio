@@ -1,4 +1,4 @@
-import { GoogleGenAI } from '@google/genai';
+import { queryHuggingFace, HuggingFaceError } from './huggingface';
 import { CADObject, DesignSection, MaterialType } from '../types/cad';
 
 export interface DesignEngineRequest {
@@ -14,7 +14,7 @@ export interface GeneratedDesignResult {
   title: string;
   description: string;
   objects: CADObject[];
-  generatedBy: 'gemini_ai' | 'parametric_template';
+  generatedBy: 'huggingface_ai' | 'parametric_template';
 }
 
 // Generate parametric fallback CAD assembly templates
@@ -145,28 +145,19 @@ export function generateParametricTemplate(req: DesignEngineRequest): CADObject[
   return [outerShell, pcbBoard];
 }
 
-// Generates 3D CAD design using Gemini API if key is available
+// Generates 3D CAD design using a Hugging Face chat model if a token is available
 export async function generateGenerativeDesign(
   req: DesignEngineRequest,
-  apiKey?: string
+  hfToken?: string
 ): Promise<GeneratedDesignResult> {
-  if (!apiKey) {
-    const fallbackObjects = generateParametricTemplate(req);
-    return {
-      title: `Generative ${req.category.toUpperCase()} Assembly`,
-      description: `Parametric CAD layout constructed for prompt: "${req.prompt}"`,
-      objects: fallbackObjects,
-      generatedBy: 'parametric_template',
-    };
-  }
-
   try {
-    const ai = new GoogleGenAI({ apiKey });
-    const model = ai.getGenerativeModel({ model: 'gemini-2.5-flash' });
-    const systemPrompt = `You are a 3D CAD Parametric Generative Design AI. Generate JSON array of CADObject specifications matching prompt "${req.prompt}" in category "${req.category}". Return valid JSON object containing title, description, and objects array.`;
+    const systemPrompt = `You are a 3D CAD Parametric Generative Design AI. Generate a JSON object with keys "title", "description", and "objects" (an array of CADObject specifications) matching prompt "${req.prompt}" in category "${req.category}". Return only valid JSON, no surrounding text.`;
 
-    const result = await model.generateContent(systemPrompt);
-    const text = result.response.text();
+    // hfToken (from the modal's optional field) overrides VITE_HF_TOKEN when
+    // provided; when left blank, queryHuggingFace falls back to the app's
+    // configured token/model and throws HuggingFaceError if neither exists,
+    // which is caught below and resolved with the parametric template.
+    const text = await queryHuggingFace(systemPrompt, { token: hfToken || undefined });
     const jsonMatch = text.match(/\{[\s\S]*\}/);
 
     if (jsonMatch) {
@@ -176,12 +167,16 @@ export async function generateGenerativeDesign(
           title: parsed.title || `AI Generated ${req.category}`,
           description: parsed.description || `Generative CAD geometry matching "${req.prompt}"`,
           objects: parsed.objects,
-          generatedBy: 'gemini_ai',
+          generatedBy: 'huggingface_ai',
         };
       }
     }
   } catch (e) {
-    console.warn('Generative AI CAD fallback to parametric template', e);
+    if (e instanceof HuggingFaceError) {
+      console.warn('Hugging Face generative CAD request failed, falling back to parametric template:', e.message);
+    } else {
+      console.warn('Generative AI CAD fallback to parametric template', e);
+    }
   }
 
   const fallbackObjects = generateParametricTemplate(req);
