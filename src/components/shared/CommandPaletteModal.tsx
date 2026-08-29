@@ -447,7 +447,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
           subtitle: 'Carbon fiber arms, brushless motors, gimbal 4K sensor',
           icon: <Cpu className="w-4 h-4 text-cyan-400" />,
           action: () => {
-            onLoadPreset('drone_quad');
+            onLoadPreset('drone_quadcopter');
             onClose();
           },
         },
@@ -469,7 +469,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
           subtitle: 'Titanium bezel, heart sensor module, haptic engine',
           icon: <Cpu className="w-4 h-4 text-emerald-400" />,
           action: () => {
-            onLoadPreset('smartwatch');
+            onLoadPreset('smartwatch_ultra');
             onClose();
           },
         }

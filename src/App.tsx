@@ -1107,8 +1107,11 @@ export default function App() {
         canRedo={historyIndex < history.length - 1}
         onForceSave={handleForceSave}
         onRestoreAutoSave={() => handleRestoreFromAutoSave()}
-        onLoadTechPreset={handleLoadTechPreset}
-        onLoadBuildingPreset={handleLoadBuildingPreset}
+        onLoadPreset={presetKey =>
+          section === 'technology'
+            ? handleLoadTechPreset(presetKey)
+            : handleLoadBuildingPreset(presetKey)
+        }
       />
 
       {/* 1. Design Versioning & Revision History Modal */}
