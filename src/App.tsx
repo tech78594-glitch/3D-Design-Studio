@@ -353,28 +353,7 @@ export default function App() {
   ]);
 
   // Collaborative Live Cursors State
-  const [onlineUsers, setOnlineUsers] = useState<LiveUserCursor[]>([
-    {
-      id: 'usr_sarah',
-      name: 'Sarah (DFM)',
-      avatarColor: '#38bdf8',
-      x: 35,
-      y: 42,
-      activeTool: 'Measuring Tool',
-      selectedPartName: 'Titanium Chassis',
-      lastActive: Date.now(),
-    },
-    {
-      id: 'usr_alex',
-      name: 'Alex (Optics)',
-      avatarColor: '#a78bfa',
-      x: 68,
-      y: 28,
-      activeTool: 'PBR Diagnostics',
-      selectedPartName: 'Camera Module',
-      lastActive: Date.now(),
-    },
-  ]);
+  const [onlineUsers, setOnlineUsers] = useState<LiveUserCursor[]>([]);
 
   // Smart Edge Selection & Feature Highlighting State
   const [isEdgeSelectionMode, setIsEdgeSelectionMode] = useState(false);
