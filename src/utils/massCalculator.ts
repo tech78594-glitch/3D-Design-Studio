@@ -303,7 +303,7 @@ export function computeMeshVolumeAndSurfaceArea(obj: CADObject): {
   return {
     volumeMm3,
     volumeCm3,
-    surfaceAreaMm2,
+    surfaceAreaMm2: totalSurfaceAreaMm2,
     surfaceAreaCm2,
     localCoGMm,
   };
