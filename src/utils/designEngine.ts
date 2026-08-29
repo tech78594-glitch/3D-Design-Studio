@@ -1,4 +1,3 @@
-import { queryHuggingFace, HuggingFaceError } from './huggingface';
 import { CADObject, DesignSection, MaterialType } from '../types/cad';
 
 export interface DesignEngineRequest {
@@ -14,7 +13,7 @@ export interface GeneratedDesignResult {
   title: string;
   description: string;
   objects: CADObject[];
-  generatedBy: 'huggingface_ai' | 'parametric_template';
+  generatedBy: 'parametric_template';
 }
 
 // Generate parametric fallback CAD assembly templates
@@ -145,45 +144,16 @@ export function generateParametricTemplate(req: DesignEngineRequest): CADObject[
   return [outerShell, pcbBoard];
 }
 
-// Generates 3D CAD design using a Hugging Face chat model if a token is available
+// Generates a 3D CAD design entirely from the algorithmic parametric
+// templates above. No AI backend, network call, or API token is used.
 export async function generateGenerativeDesign(
-  req: DesignEngineRequest,
-  hfToken?: string
+  req: DesignEngineRequest
 ): Promise<GeneratedDesignResult> {
-  try {
-    const systemPrompt = `You are a 3D CAD Parametric Generative Design AI. Generate a JSON object with keys "title", "description", and "objects" (an array of CADObject specifications) matching prompt "${req.prompt}" in category "${req.category}". Return only valid JSON, no surrounding text.`;
-
-    // hfToken (from the modal's optional field) overrides VITE_HF_TOKEN when
-    // provided; when left blank, queryHuggingFace falls back to the app's
-    // configured token/model and throws HuggingFaceError if neither exists,
-    // which is caught below and resolved with the parametric template.
-    const text = await queryHuggingFace(systemPrompt, { token: hfToken || undefined });
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      if (Array.isArray(parsed.objects) && parsed.objects.length > 0) {
-        return {
-          title: parsed.title || `AI Generated ${req.category}`,
-          description: parsed.description || `Generative CAD geometry matching "${req.prompt}"`,
-          objects: parsed.objects,
-          generatedBy: 'huggingface_ai',
-        };
-      }
-    }
-  } catch (e) {
-    if (e instanceof HuggingFaceError) {
-      console.warn('Hugging Face generative CAD request failed, falling back to parametric template:', e.message);
-    } else {
-      console.warn('Generative AI CAD fallback to parametric template', e);
-    }
-  }
-
-  const fallbackObjects = generateParametricTemplate(req);
+  const objects = generateParametricTemplate(req);
   return {
     title: `Parametric ${req.category.toUpperCase()} Design`,
     description: `Algorithmic 3D layout for: "${req.prompt}"`,
-    objects: fallbackObjects,
+    objects,
     generatedBy: 'parametric_template',
   };
 }

@@ -30,7 +30,6 @@ export const AutoTextureModal: React.FC<AutoTextureModalProps> = ({
   const [roughness, setRoughness] = useState(0.3);
   const [metalness, setMetalness] = useState(0.6);
   const [colorHex, setColorHex] = useState('#38bdf8');
-  const [apiKey, setApiKey] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedPreviewUrl, setGeneratedPreviewUrl] = useState<string | null>(null);
   const [lastGeneratedMaterial, setLastGeneratedMaterial] = useState<CADMaterial | null>(null);
@@ -40,16 +39,13 @@ export const AutoTextureModal: React.FC<AutoTextureModalProps> = ({
   const handleGenerate = async () => {
     setIsGenerating(true);
     try {
-      const result = await generateAutoTexture(
-        {
-          prompt,
-          presetStyle,
-          roughness,
-          metalness,
-          colorHex,
-        },
-        apiKey
-      );
+      const result = await generateAutoTexture({
+        prompt,
+        presetStyle,
+        roughness,
+        metalness,
+        colorHex,
+      });
 
       setGeneratedPreviewUrl(result.textureDataUrl);
       setLastGeneratedMaterial(result.material);
@@ -76,9 +72,9 @@ export const AutoTextureModal: React.FC<AutoTextureModalProps> = ({
             </div>
             <div>
               <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
-                Automatic AI PBR Texture Generator
+                Automatic PBR Texture Generator
                 <span className="px-2 py-0.5 text-xs bg-purple-500/20 text-purple-300 rounded-full font-mono">
-                  Hugging Face & Procedural
+                  Procedural
                 </span>
               </h2>
               <p className="text-xs text-slate-400">
@@ -196,18 +192,6 @@ export const AutoTextureModal: React.FC<AutoTextureModalProps> = ({
                 <span className="text-xs font-mono text-slate-300 uppercase">{colorHex}</span>
               </div>
             </div>
-          </div>
-
-          {/* Optional Hugging Face Token */}
-          <div className="space-y-1 pt-2">
-            <label className="text-[11px] text-slate-400">Optional Hugging Face Token (for LLM PBR tuning)</label>
-            <input
-              type="password"
-              value={apiKey}
-              onChange={e => setApiKey(e.target.value)}
-              placeholder="Hugging Face token (leave blank to use the app's configured token, or for instant local Canvas synthesis)"
-              className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-300 focus:outline-none focus:border-purple-500 font-mono"
-            />
           </div>
 
           {/* Preview Image if generated */}

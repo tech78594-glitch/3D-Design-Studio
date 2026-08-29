@@ -31,7 +31,6 @@ export const DesignEngineModal: React.FC<DesignEngineModalProps> = ({
   const [targetWidth, setTargetWidth] = useState(80);
   const [targetHeight, setTargetHeight] = useState(140);
   const [targetDepth, setTargetDepth] = useState(16);
-  const [apiKey, setApiKey] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [lastSummary, setLastSummary] = useState<string | null>(null);
 
@@ -40,17 +39,14 @@ export const DesignEngineModal: React.FC<DesignEngineModalProps> = ({
   const handleSynthesize = async () => {
     setIsGenerating(true);
     try {
-      const result = await generateGenerativeDesign(
-        {
-          prompt,
-          category,
-          targetWidthMm: targetWidth,
-          targetHeightMm: targetHeight,
-          targetDepthMm: targetDepth,
-          section,
-        },
-        apiKey
-      );
+      const result = await generateGenerativeDesign({
+        prompt,
+        category,
+        targetWidthMm: targetWidth,
+        targetHeightMm: targetHeight,
+        targetDepthMm: targetDepth,
+        section,
+      });
 
       onGenerateDesign(result.objects);
       setLastSummary(`${result.title} — ${result.description} (${result.objects.length} CAD components generated via ${result.generatedBy})`);
@@ -73,13 +69,13 @@ export const DesignEngineModal: React.FC<DesignEngineModalProps> = ({
             </div>
             <div>
               <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
-                Generative AI & Parametric CAD Design Engine
+                Parametric CAD Design Engine
                 <span className="px-2 py-0.5 text-xs bg-amber-500/20 text-amber-300 rounded-full font-mono">
-                  Hugging Face
+                  Algorithmic
                 </span>
               </h2>
               <p className="text-xs text-slate-400">
-                Synthesize complete 3D assemblies, cooling modules, brackets, or enclosure shells from text prompts.
+                Synthesize complete 3D assemblies, cooling modules, brackets, or enclosure shells from parametric templates.
               </p>
             </div>
           </div>
@@ -184,18 +180,6 @@ export const DesignEngineModal: React.FC<DesignEngineModalProps> = ({
                 className="w-full h-1.5 bg-slate-800 rounded appearance-none cursor-pointer accent-amber-400"
               />
             </div>
-          </div>
-
-          {/* Optional Hugging Face Token */}
-          <div className="space-y-1 pt-2">
-            <label className="text-[11px] text-slate-400">Optional Hugging Face Token (for LLM generative CAD structure)</label>
-            <input
-              type="password"
-              value={apiKey}
-              onChange={e => setApiKey(e.target.value)}
-              placeholder="Hugging Face token (leave blank to use the app's configured token, or for the algorithmic parametric generator)"
-              className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-300 focus:outline-none focus:border-amber-500 font-mono"
-            />
           </div>
 
           {lastSummary && (
