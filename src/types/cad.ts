@@ -123,7 +123,7 @@ export interface CADObject {
 export interface DeviceConfig {
   id: string;
   name: string;
-  type: 'smartphone' | 'smartwatch' | 'drone' | 'vr_headset' | 'keyboard' | 'iot_hub' | 'headphones' | 'custom_device';
+  type: 'smartphone' | 'smartwatch' | 'drone' | 'vr_headset' | 'keyboard' | 'iot_hub' | 'headphones' | 'earbuds' | 'custom_device';
   description: string;
   dimensions: { width: number; height: number; depth: number; cornerRadius: number; wallThickness: number };
   casingColor: string;

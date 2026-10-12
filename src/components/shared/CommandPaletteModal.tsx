@@ -430,6 +430,17 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
           },
         },
         {
+          id: 'preset_earbuds',
+          category: 'presets',
+          title: 'Load Preset: AeroBud Pro True Wireless Earbuds',
+          subtitle: 'Adaptive ANC, 11mm dynamic driver, capacitive force-sensor stem (12 parts)',
+          icon: <Cpu className="w-4 h-4 text-cyan-400" />,
+          action: () => {
+            onLoadPreset('wireless_earbuds_pro');
+            onClose();
+          },
+        },
+        {
           id: 'preset_phone',
           category: 'presets',
           title: 'Load Preset: Smartphone Pro Max',
