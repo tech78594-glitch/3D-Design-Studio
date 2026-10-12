@@ -135,14 +135,14 @@ export default function App() {
     if (getIsMobileViewport()) setIsLeftPanelCollapsed(true);
   };
 
-  // Technology Section State — defaults to the Wireless Earbuds device (replaces the
-  // former default Phone/smartphone design).
-  const [deviceConfig, setDeviceConfig] = useState<DeviceConfig>(DEVICE_PRESETS.wireless_earbuds_pro.config);
+  // Technology Section State — defaults to the Studio Headphones device (replaces the
+  // former default Wireless Earbuds design).
+  const [deviceConfig, setDeviceConfig] = useState<DeviceConfig>(DEVICE_PRESETS.headphones_studio_pro.config);
   // Building Section State
   const [buildingConfig, setBuildingConfig] = useState<BuildingConfig>(BUILDING_PRESETS.modern_villa.config);
 
   // Scene Objects Collection (combined for current section)
-  const [techObjects, setTechObjects] = useState<CADObject[]>(DEVICE_PRESETS.wireless_earbuds_pro.objects);
+  const [techObjects, setTechObjects] = useState<CADObject[]>(DEVICE_PRESETS.headphones_studio_pro.objects);
   const [buildingObjects, setBuildingObjects] = useState<CADObject[]>(BUILDING_PRESETS.modern_villa.objects);
 
   // CAD Layers & Tagging State
@@ -153,16 +153,16 @@ export default function App() {
   // Kinematic Joints & Motion Simulation
   const [kinematicJoints, setKinematicJoints] = useState<KinematicJoint[]>([
     {
-      id: 'joint_ear_tip_fit',
-      name: 'Ear Tip Compression Fit Actuator',
+      id: 'joint_slider_telescope',
+      name: 'Telescoping Headband Slider Extension',
       type: 'prismatic',
-      parentPartId: 'part_main_housing',
-      childPartId: 'part_ear_tip',
-      anchorPoint: [0, 15.5, 1],
+      parentPartId: 'part_headband_arch',
+      childPartId: 'part_slider_left',
+      anchorPoint: [-66, 42, 0],
       axisVector: [0, 1, 0],
       currentValue: 0,
-      minLimit: -2,
-      maxLimit: 2,
+      minLimit: -15,
+      maxLimit: 15,
       speed: 15,
       direction: 1,
       cycleType: 'oscillate',
@@ -170,16 +170,16 @@ export default function App() {
       trajectoryColor: '#38bdf8',
     },
     {
-      id: 'joint_force_sensor',
-      name: 'Pinch Force-Sensor Rocker',
-      type: 'prismatic',
-      parentPartId: 'part_stem',
-      childPartId: 'part_force_pad',
-      anchorPoint: [0, -4, 4.2],
-      axisVector: [0, 0, 1],
+      id: 'joint_volume_dial',
+      name: 'Knurled Aluminum Volume Crown Rotation',
+      type: 'revolute',
+      parentPartId: 'part_earcup_right',
+      childPartId: 'part_volume_dial',
+      anchorPoint: [88, 6, -14],
+      axisVector: [1, 0, 0],
       currentValue: 0,
-      minLimit: -1,
-      maxLimit: 1,
+      minLimit: -180,
+      maxLimit: 180,
       speed: 8,
       direction: 1,
       cycleType: 'pingpong',
@@ -191,36 +191,36 @@ export default function App() {
   // Assembly Geometric Constraints & Kinematic Mates
   const [techConstraints, setTechConstraints] = useState<CADConstraint[]>([
     {
-      id: 'c_eartip_housing',
-      name: 'Coincident: Ear Tip ➔ Main Housing',
+      id: 'c_earcup_yoke',
+      name: 'Coincident: Earcup Shell ➔ Gimbal Yoke',
       type: 'coincident',
-      partAId: 'part_main_housing',
-      partBId: 'part_ear_tip',
-      axis: 'y',
+      partAId: 'part_yoke_left',
+      partBId: 'part_earcup_left',
+      axis: 'x',
       offset: 0,
       alignment: 'aligned',
       active: true,
       status: 'satisfied',
     },
     {
-      id: 'c_battery_stem',
-      name: 'Coincident: Li-Polymer Cell ➔ Stem Cavity',
+      id: 'c_battery_earcup',
+      name: 'Coincident: Li-Polymer Cell ➔ Earcup Cavity',
       type: 'coincident',
-      partAId: 'part_stem',
+      partAId: 'part_earcup_right',
       partBId: 'part_battery_cell',
-      axis: 'y',
-      offset: -2.5,
+      axis: 'x',
+      offset: -4,
       alignment: 'aligned',
       active: true,
       status: 'satisfied',
     },
     {
-      id: 'c_flexpcb_concentric',
-      name: 'Concentric: Flex Antenna PCB ➔ Stem Standoffs',
+      id: 'c_driver_concentric',
+      name: 'Concentric: Beryllium Driver ➔ Earcup Shell',
       type: 'concentric',
-      partAId: 'part_stem',
-      partBId: 'part_flex_pcb',
-      axis: 'y',
+      partAId: 'part_earcup_left',
+      partBId: 'part_driver_left',
+      axis: 'x',
       offset: 0,
       alignment: 'aligned',
       active: true,
@@ -244,32 +244,32 @@ export default function App() {
   const [measurements, setMeasurements] = useState<CADMeasurement[]>([
     {
       id: 'meas_init_width',
-      name: 'Housing Overall Width Caliper',
+      name: 'Earcup-to-Earcup Overall Width Caliper',
       mode: 'point_to_point',
-      pointA: [-9, 6, 0],
-      pointB: [9, 6, 0],
-      distanceMm: 18.0,
-      deltaX: 18.0,
+      pointA: [-89, 6, -14],
+      pointB: [89, 6, -14],
+      distanceMm: 178.0,
+      deltaX: 178.0,
       deltaY: 0,
       deltaZ: 0,
       color: '#06b6d4',
       visible: true,
-      notes: 'In-ear housing width tolerance verified (+/- 0.05mm)',
+      notes: 'Clamping force span tolerance verified (+/- 0.05mm)',
       createdAt: new Date(Date.now() - 3600000).toISOString(),
     },
     {
       id: 'meas_init_height',
-      name: 'Tip-to-Stem Overall Height Caliper',
+      name: 'Headband-to-Earcup Overall Height Caliper',
       mode: 'point_to_point',
-      pointA: [0, -17.0, 0],
-      pointB: [0, 17.0, 0],
-      distanceMm: 34.0,
+      pointA: [0, -99.0, 0],
+      pointB: [0, 99.0, 0],
+      distanceMm: 198.0,
       deltaX: 0,
-      deltaY: 34.0,
+      deltaY: 198.0,
       deltaZ: 0,
       color: '#38bdf8',
       visible: true,
-      notes: 'Ear canal insertion depth profile',
+      notes: 'Full telescoping slider extension profile',
       createdAt: new Date(Date.now() - 1800000).toISOString(),
     },
   ]);
@@ -281,12 +281,12 @@ export default function App() {
       id: 'comment_init_1',
       author: 'Lead DFM Engineer',
       avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=80&auto=format&fit=crop&q=80',
-      title: 'Acoustic Vent Path Validation',
-      body: 'Verified driver back-vent clearance against the ceramic housing wall. 0.3mm air gap maintained for consistent bass response across units.',
-      position: [0, 6, 0],
-      normal: [0, 0, 1],
-      targetPartId: 'part_main_housing',
-      targetPartName: 'Gloss Ceramic-Coated Acoustic Housing',
+      title: 'Earcup Thermal Venting Path Validation',
+      body: 'Verified beryllium driver back-vent clearance against the anodized aluminum earcup shell. 0.4mm air gap maintained across the CNC perimeter.',
+      position: [-75, -8, 0],
+      normal: [-1, 0, 0],
+      targetPartId: 'part_earcup_left',
+      targetPartName: 'CNC Acoustic Aluminum Earcup Shell (Left)',
       category: 'thermal',
       priority: 'high',
       status: 'in_review',
@@ -305,12 +305,12 @@ export default function App() {
       id: 'comment_init_2',
       author: 'Acoustics Architect',
       avatarUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=80&auto=format&fit=crop&q=80',
-      title: 'Ear Tip Insertion Depth',
-      body: 'Ear tip protrusion capped at 8mm from the housing face to balance seal quality against comfort for most ear canal sizes.',
-      position: [0, 15.5, 1],
-      normal: [0, 1, 0],
-      targetPartId: 'part_ear_tip',
-      targetPartName: 'Medical-Grade Silicone Ear Tip (Size M)',
+      title: 'Telescoping Slider Travel Range',
+      body: 'Slider extension capped at 15mm per side beyond the headband arch to fit the 5th-to-95th percentile head circumference range.',
+      position: [-66, 42, 0],
+      normal: [-1, 0, 0],
+      targetPartId: 'part_slider_left',
+      targetPartName: 'CNC Anodized Aluminum Slider (Left)',
       category: 'geometry',
       priority: 'medium',
       status: 'resolved',
@@ -322,16 +322,16 @@ export default function App() {
   // Design Versioning & Revisions
   const [versionHistory, setVersionHistory] = useState<DesignVersion[]>([
     createVersionSnapshot(
-      DEVICE_PRESETS.wireless_earbuds_pro.objects,
+      DEVICE_PRESETS.headphones_studio_pro.objects,
       'v1.0.0-PROTOTYPE',
       'Initial Concept Baseline',
-      'Initial parametric architecture with 11mm dynamic driver and ceramic-coated acoustic housing.'
+      'Initial parametric architecture with 40mm beryllium drivers and telescoping steel headband.'
     ),
     createVersionSnapshot(
-      DEVICE_PRESETS.wireless_earbuds_pro.objects,
+      DEVICE_PRESETS.headphones_studio_pro.objects,
       'v1.1.0-ACOUSTIC',
       'Acoustic & Fit Optimization',
-      'Added adaptive ANC feedback mic, refined ear tip taper, and increased stem battery cavity tolerance.'
+      'Added quad beamforming ANC mic array, refined earcup gimbal yoke travel, and increased cushion compliance tolerance.'
     ),
   ]);
 
@@ -389,7 +389,7 @@ export default function App() {
       author: 'Acoustics Architect',
       avatarColor: '#a78bfa',
       channel: 'dfm-review',
-      text: 'Ear tip insertion depth clearance confirmed at 8mm from housing face.',
+      text: 'Telescoping slider travel range confirmed at 15mm per side from the headband arch.',
       timestamp: '02:18 PM',
     },
   ]);
