@@ -63,6 +63,7 @@ import { formatTimeAgo, AutoSaveIntervalOption } from '../../utils/autoSave';
 interface HeaderProps {
   section: DesignSection;
   onSelectSection: (section: DesignSection) => void;
+  onGoHome?: () => void;
   renderMode: RenderMode;
   onChangeRenderMode: (mode: RenderMode) => void;
   lightingPreset: LightingPreset;
@@ -130,6 +131,7 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   section,
   onSelectSection,
+  onGoHome,
   renderMode,
   onChangeRenderMode,
   lightingPreset,
@@ -280,11 +282,20 @@ export const Header: React.FC<HeaderProps> = ({
     >
       {/* Left: Brand Identity, Section Switcher & Quick Command Search */}
       <div className="flex items-center gap-2.5 sm:gap-3.5 shrink-0">
-        <div className="flex items-center gap-2">
+        <button
+          id="btn_header_go_home"
+          type="button"
+          onClick={onGoHome}
+          disabled={!onGoHome}
+          title="Back to Home"
+          className={`flex items-center gap-2 rounded-lg transition-opacity ${
+            onGoHome ? 'hover:opacity-80 cursor-pointer' : 'cursor-default'
+          }`}
+        >
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-medium shadow-md">
             <Box className="w-4 h-4" />
           </div>
-          <div className="hidden md:block">
+          <div className="hidden md:block text-left">
             <h1 className="text-xs font-bold tracking-wider uppercase flex items-center gap-1.5">
               <span>3D CAD Studio</span>
               <span className="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase bg-blue-500/20 text-blue-400 border border-blue-500/30">
@@ -296,7 +307,7 @@ export const Header: React.FC<HeaderProps> = ({
               Real-time Parametric CAD
             </div>
           </div>
-        </div>
+        </button>
 
         {/* Primary Two Sections Switcher */}
         <div className={`flex items-center p-0.5 sm:p-1 rounded-lg border shadow-inner ${isLight ? 'bg-slate-200 border-slate-300' : 'bg-zinc-950 border-zinc-800'}`}>

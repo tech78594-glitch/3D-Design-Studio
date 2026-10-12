@@ -32,6 +32,7 @@ import {
 import { DEVICE_PRESETS } from './components/tech/DevicePresets';
 import { BUILDING_PRESETS } from './components/building/BuildingPresets';
 import { Header } from './components/shared/Header';
+import { HomePage } from './components/shared/HomePage';
 import { Viewport3D } from './components/canvas/Viewport3D';
 import { TechnologyDesigner } from './components/tech/TechnologyDesigner';
 import { BuildingDesigner } from './components/building/BuildingDesigner';
@@ -97,6 +98,10 @@ export default function App() {
     const timer = window.setTimeout(() => setIsAppLoading(false), 1100);
     return () => window.clearTimeout(timer);
   }, []);
+
+  // Home Page — shown first, lets the user pick CAD Design or Architectural BIM
+  // before entering the workspace. Reachable again from the header logo.
+  const [showHomePage, setShowHomePage] = useState<boolean>(true);
 
   // Theme state: Dark, Light, Blueprint
   const [themeMode, setThemeMode] = useState<StudioThemeMode>('dark');
@@ -821,6 +826,73 @@ export default function App() {
   const isLight = themeMode === 'light';
   const isBlueprint = themeMode === 'blueprint';
 
+  // App Entry Loading Screen overlay — shared between the Home Page and the workspace
+  // so it still shows briefly no matter which one is current when the app mounts.
+  const loadingScreenEl = (
+    <AnimatePresence>
+      {isAppLoading && (
+        <motion.div
+          key="app-loading-screen"
+          className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-5 bg-zinc-950"
+          initial={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.5, ease: 'easeInOut' }}
+        >
+          <motion.div
+            className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-2xl shadow-blue-500/30"
+            initial={{ scale: 0.6, opacity: 0, rotate: -8 }}
+            animate={{ scale: 1, opacity: 1, rotate: 0 }}
+            transition={{ duration: 0.5, ease: 'easeOut' }}
+          >
+            <Box className="w-8 h-8 text-white" />
+          </motion.div>
+          <motion.div
+            className="flex flex-col items-center gap-2"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.15 }}
+          >
+            <span className="text-sm font-bold tracking-wider uppercase text-zinc-100 flex items-center gap-1.5">
+              3D CAD Studio
+              <span className="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                PRO
+              </span>
+            </span>
+            <span className="text-[11px] font-mono text-zinc-500">Initializing Studio Workspace...</span>
+          </motion.div>
+          <motion.div
+            className="w-40 h-1 rounded-full bg-zinc-800 overflow-hidden"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.2 }}
+          >
+            <motion.div
+              className="h-full w-1/3 rounded-full bg-gradient-to-r from-blue-500 to-indigo-500"
+              animate={{ x: ['-100%', '220%'] }}
+              transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}
+            />
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
+  if (showHomePage) {
+    return (
+      <>
+        <HomePage
+          themeMode={themeMode}
+          onSelectSection={sec => {
+            setSection(sec);
+            setSelectedObjectId(null);
+            setShowHomePage(false);
+          }}
+        />
+        {loadingScreenEl}
+      </>
+    );
+  }
+
   return (
     <div
       className={`flex flex-col w-full h-screen overflow-hidden font-sans select-none antialiased transition-colors ${
@@ -833,6 +905,7 @@ export default function App() {
     >
       {/* Top Application Navigation & CAD Toolbar */}
       <Header
+        onGoHome={() => setShowHomePage(true)}
         section={section}
         onSelectSection={sec => {
           setSection(sec);
@@ -1560,53 +1633,7 @@ export default function App() {
         }}
       />
 
-      {/* App Entry Loading Screen */}
-      <AnimatePresence>
-        {isAppLoading && (
-          <motion.div
-            key="app-loading-screen"
-            className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-5 bg-zinc-950"
-            initial={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.5, ease: 'easeInOut' }}
-          >
-            <motion.div
-              className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-2xl shadow-blue-500/30"
-              initial={{ scale: 0.6, opacity: 0, rotate: -8 }}
-              animate={{ scale: 1, opacity: 1, rotate: 0 }}
-              transition={{ duration: 0.5, ease: 'easeOut' }}
-            >
-              <Box className="w-8 h-8 text-white" />
-            </motion.div>
-            <motion.div
-              className="flex flex-col items-center gap-2"
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.15 }}
-            >
-              <span className="text-sm font-bold tracking-wider uppercase text-zinc-100 flex items-center gap-1.5">
-                3D CAD Studio
-                <span className="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase bg-blue-500/20 text-blue-400 border border-blue-500/30">
-                  PRO
-                </span>
-              </span>
-              <span className="text-[11px] font-mono text-zinc-500">Initializing Studio Workspace...</span>
-            </motion.div>
-            <motion.div
-              className="w-40 h-1 rounded-full bg-zinc-800 overflow-hidden"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.2 }}
-            >
-              <motion.div
-                className="h-full w-1/3 rounded-full bg-gradient-to-r from-blue-500 to-indigo-500"
-                animate={{ x: ['-100%', '220%'] }}
-                transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}
-              />
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {loadingScreenEl}
     </div>
   );
 }
