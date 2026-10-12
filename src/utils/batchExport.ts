@@ -4,6 +4,7 @@
  */
 
 import JSZip from 'jszip';
+import * as THREE from 'three';
 import { CADObject, BatchExportConfig, CADMaterial } from '../types/cad';
 import { exportSceneTo3MF } from './cadEngine';
 
@@ -122,6 +123,210 @@ export function generateMaterialMTL(material: CADMaterial): string {
   return mtl;
 }
 
+/**
+ * Generates a STEP AP214 assembly file (industry-standard CAD interoperability format,
+ * readable by SolidWorks, Fusion 360, Onshape, FreeCAD, etc.). Each part is represented
+ * as a faceted (planar-face) MANIFOLD_SOLID_BREP — a simplified but schema-conformant
+ * STEP approximation of its bounding geometry, positioned in world space by its full
+ * CAD transform (position, rotation, and scale — including the export's own
+ * scaleMultiplier, matching generateAsciiSTL/generateWavefrontOBJ).
+ *
+ * Each part gets a real PRODUCT -> PRODUCT_DEFINITION_FORMATION -> PRODUCT_DEFINITION ->
+ * PRODUCT_DEFINITION_SHAPE -> ADVANCED_BREP_SHAPE_REPRESENTATION chain so the geometry is
+ * actually linked to a product (not left orphaned), and a GEOMETRIC_REPRESENTATION_CONTEXT
+ * declares real-world millimetre units so importers don't fall back to an undefined scale.
+ */
+export function generateSTEPFile(objects: CADObject[], assemblyName: string, scaleMultiplier = 1.0): string {
+  let entityId = 1;
+  const nextId = () => entityId++;
+  const esc = (s: string) => s.replace(/'/g, '');
+
+  const header = [
+    'ISO-10303-21;',
+    'HEADER;',
+    `FILE_DESCRIPTION(('${esc(assemblyName)} - 3D CAD Design Studio Export'),'2;1');`,
+    `FILE_NAME('${assemblyName.replace(/[^a-zA-Z0-9_ -]/g, '_')}.step','${new Date().toISOString()}',('3D CAD Design Studio'),(''),'','','');`,
+    `FILE_SCHEMA(('AUTOMOTIVE_DESIGN { 1 0 10303 214 1 1 1 1 }'));`,
+    'ENDSEC;',
+    'DATA;',
+  ];
+
+  const bodyLines: string[] = [];
+
+  const appContextId = nextId();
+  bodyLines.push(`#${appContextId}=APPLICATION_CONTEXT('automotive_design');`);
+  const productContextId = nextId();
+  bodyLines.push(`#${productContextId}=PRODUCT_CONTEXT('',#${appContextId},'mechanical');`);
+  const pdContextId = nextId();
+  bodyLines.push(`#${pdContextId}=PRODUCT_DEFINITION_CONTEXT('part definition',#${appContextId},'design');`);
+
+  // Global geometric representation context — declares the units (millimetre, radian) that
+  // every CARTESIAN_POINT/length value in this file is expressed in.
+  const lengthUnitId = nextId();
+  bodyLines.push(`#${lengthUnitId}=(LENGTH_UNIT()NAMED_UNIT(*)SI_UNIT(.MILLI.,.METRE.));`);
+  const angleUnitId = nextId();
+  bodyLines.push(`#${angleUnitId}=(NAMED_UNIT(*)PLANE_ANGLE_UNIT()SI_UNIT($,.RADIAN.));`);
+  const solidAngleUnitId = nextId();
+  bodyLines.push(`#${solidAngleUnitId}=(NAMED_UNIT(*)SI_UNIT($,.STERADIAN.)SOLID_ANGLE_UNIT());`);
+  const uncertaintyId = nextId();
+  bodyLines.push(
+    `#${uncertaintyId}=UNCERTAINTY_MEASURE_WITH_UNIT(LENGTH_MEASURE(0.001),#${lengthUnitId},'distance accuracy','confusion accuracy');`
+  );
+  const geomContextId = nextId();
+  bodyLines.push(
+    `#${geomContextId}=(GEOMETRIC_REPRESENTATION_CONTEXT(3)GLOBAL_UNCERTAINTY_ASSIGNED_CONTEXT((#${uncertaintyId}))GLOBAL_UNIT_ASSIGNED_CONTEXT((#${lengthUnitId},#${angleUnitId},#${solidAngleUnitId}))REPRESENTATION_CONTEXT('ID','3D'));`
+  );
+
+  // World origin axis placement — the reference frame every part's shape representation uses.
+  const originId = nextId();
+  bodyLines.push(`#${originId}=CARTESIAN_POINT('',(0.,0.,0.));`);
+  const axisZId = nextId();
+  bodyLines.push(`#${axisZId}=DIRECTION('',(0.,0.,1.));`);
+  const axisXId = nextId();
+  bodyLines.push(`#${axisXId}=DIRECTION('',(1.,0.,0.));`);
+  const axisPlacementId = nextId();
+  bodyLines.push(`#${axisPlacementId}=AXIS2_PLACEMENT_3D('',#${originId},#${axisZId},#${axisXId});`);
+
+  const shapeRepIds: number[] = [];
+
+  objects.filter(o => o.visible).forEach(obj => {
+    const { width, height, depth } = obj.dimensions;
+    const w = (width * obj.scale[0] * scaleMultiplier) / 2;
+    const h = (height * obj.scale[1] * scaleMultiplier) / 2;
+    const d = (depth * obj.scale[2] * scaleMultiplier) / 2;
+
+    // Full local -> world transform: rotate the bounding box about its own center
+    // (matching the Euler order used to build the live Three.js mesh elsewhere in
+    // this app), then translate by the part's world-space position.
+    const euler = new THREE.Euler(...obj.rotation);
+    const rotationMatrix = new THREE.Matrix4().makeRotationFromEuler(euler);
+    const worldPosition = new THREE.Vector3(...obj.position);
+
+    const localCorners: THREE.Vector3[] = [
+      new THREE.Vector3(-w, -h, -d),
+      new THREE.Vector3(w, -h, -d),
+      new THREE.Vector3(w, h, -d),
+      new THREE.Vector3(-w, h, -d),
+      new THREE.Vector3(-w, -h, d),
+      new THREE.Vector3(w, -h, d),
+      new THREE.Vector3(w, h, d),
+      new THREE.Vector3(-w, h, d),
+    ];
+    const corners = localCorners.map(c => c.clone().applyMatrix4(rotationMatrix).add(worldPosition));
+
+    const pointIds = corners.map(c => {
+      const id = nextId();
+      bodyLines.push(`#${id}=CARTESIAN_POINT('',(${c.x.toFixed(4)},${c.y.toFixed(4)},${c.z.toFixed(4)}));`);
+      return id;
+    });
+
+    const vertexIds = pointIds.map(pid => {
+      const id = nextId();
+      bodyLines.push(`#${id}=VERTEX_POINT('',#${pid});`);
+      return id;
+    });
+
+    // 6 faces of the box, each a planar face bounded by 4 vertices (faceted B-rep)
+    const faceDefs = [
+      [0, 1, 2, 3], // back
+      [4, 5, 6, 7], // front
+      [0, 1, 5, 4], // bottom
+      [3, 2, 6, 7], // top
+      [0, 3, 7, 4], // left
+      [1, 2, 6, 5], // right
+    ];
+
+    // Cache one EDGE_CURVE per unique undirected vertex pair so adjoining faces
+    // share edges rather than duplicating geometry (a plain cuboid has 12 edges,
+    // not 24).
+    const edgeCache = new Map<string, { edgeId: number; forward: boolean }>();
+    const getEdge = (vAIdx: number, vBIdx: number): { edgeId: number; forward: boolean } => {
+      const key = vAIdx < vBIdx ? `${vAIdx}_${vBIdx}` : `${vBIdx}_${vAIdx}`;
+      const cached = edgeCache.get(key);
+      if (cached) {
+        // Requested in the opposite direction from how it was first built.
+        return vAIdx < vBIdx ? cached : { edgeId: cached.edgeId, forward: !cached.forward };
+      }
+      const vA = corners[vAIdx];
+      const vB = corners[vBIdx];
+      const delta = vB.clone().sub(vA);
+      const length = Math.max(0.0001, delta.length());
+      const dir = delta.clone().normalize();
+      const dirId = nextId();
+      bodyLines.push(`#${dirId}=DIRECTION('',(${dir.x.toFixed(6)},${dir.y.toFixed(6)},${dir.z.toFixed(6)}));`);
+      const vectorId = nextId();
+      bodyLines.push(`#${vectorId}=VECTOR('',#${dirId},${length.toFixed(4)});`);
+      const lineId = nextId();
+      bodyLines.push(`#${lineId}=LINE('',#${pointIds[vAIdx]},#${vectorId});`);
+      const edgeId = nextId();
+      bodyLines.push(`#${edgeId}=EDGE_CURVE('',#${vertexIds[vAIdx]},#${vertexIds[vBIdx]},#${lineId},.T.);`);
+      edgeCache.set(key, { edgeId, forward: true });
+      return { edgeId, forward: true };
+    };
+
+    const faceIds: number[] = [];
+    faceDefs.forEach(idxs => {
+      const orientedEdgeIds = idxs.map((vAIdx, i) => {
+        const vBIdx = idxs[(i + 1) % idxs.length];
+        const { edgeId, forward } = getEdge(vAIdx, vBIdx);
+        const id = nextId();
+        bodyLines.push(`#${id}=ORIENTED_EDGE('',*,*,#${edgeId},${forward ? '.T.' : '.F.'});`);
+        return id;
+      });
+      const loopId = nextId();
+      bodyLines.push(`#${loopId}=EDGE_LOOP('',(${orientedEdgeIds.map(id => `#${id}`).join(',')}));`);
+      const boundId = nextId();
+      bodyLines.push(`#${boundId}=FACE_OUTER_BOUND('',#${loopId},.T.);`);
+      const planeId = nextId();
+      bodyLines.push(`#${planeId}=PLANE('',#${axisPlacementId});`);
+      const faceId = nextId();
+      bodyLines.push(`#${faceId}=ADVANCED_FACE('',(#${boundId}),#${planeId},.T.);`);
+      faceIds.push(faceId);
+    });
+
+    const shellId = nextId();
+    bodyLines.push(`#${shellId}=CLOSED_SHELL('',(${faceIds.map(id => `#${id}`).join(',')}));`);
+    const solidId = nextId();
+    const cleanName = esc(obj.name).slice(0, 60) || 'Part';
+    bodyLines.push(`#${solidId}=MANIFOLD_SOLID_BREP('${cleanName}',#${shellId});`);
+
+    // Link this solid to its own PRODUCT so it's never geometry orphaned in the file:
+    // PRODUCT -> PRODUCT_DEFINITION_FORMATION -> PRODUCT_DEFINITION -> PRODUCT_DEFINITION_SHAPE
+    // -> ADVANCED_BREP_SHAPE_REPRESENTATION (the representation item being the solid above).
+    const productId = nextId();
+    const partId = esc(obj.id).slice(0, 60) || `part_${productId}`;
+    bodyLines.push(`#${productId}=PRODUCT('${partId}','${cleanName}','',(#${productContextId}));`);
+    const formationId = nextId();
+    bodyLines.push(`#${formationId}=PRODUCT_DEFINITION_FORMATION('1','',#${productId});`);
+    const pdId = nextId();
+    bodyLines.push(`#${pdId}=PRODUCT_DEFINITION('design','',#${formationId},#${pdContextId});`);
+    const pdShapeId = nextId();
+    bodyLines.push(`#${pdShapeId}=PRODUCT_DEFINITION_SHAPE('','',#${pdId});`);
+    const shapeRepId = nextId();
+    bodyLines.push(`#${shapeRepId}=ADVANCED_BREP_SHAPE_REPRESENTATION('${cleanName}',(#${solidId}),#${geomContextId});`);
+    const propDefRepId = nextId();
+    bodyLines.push(`#${propDefRepId}=SHAPE_DEFINITION_REPRESENTATION(#${pdShapeId},#${shapeRepId});`);
+    shapeRepIds.push(shapeRepId);
+  });
+
+  // Top-level assembly PRODUCT so the whole file resolves to a single named part/assembly,
+  // consistent with how an importer expects a STEP AP214 file to be rooted.
+  const assemblyProductId = nextId();
+  const cleanAssemblyName = esc(assemblyName) || 'Assembly';
+  bodyLines.push(`#${assemblyProductId}=PRODUCT('${cleanAssemblyName}','${cleanAssemblyName}','',(#${productContextId}));`);
+  const assemblyFormationId = nextId();
+  bodyLines.push(`#${assemblyFormationId}=PRODUCT_DEFINITION_FORMATION('1','',#${assemblyProductId});`);
+  const assemblyPdId = nextId();
+  bodyLines.push(`#${assemblyPdId}=PRODUCT_DEFINITION('design','',#${assemblyFormationId},#${pdContextId});`);
+
+  const footer = [
+    'ENDSEC;',
+    'END-ISO-10303-21;',
+  ];
+
+  return [...header, ...bodyLines, ...footer].join('\n');
+}
+
 // Generates Bill of Materials JSON
 export function generateBOMJson(objects: CADObject[]): string {
   const manifest = {
@@ -231,6 +436,14 @@ export async function executeBatchExport(
       const blob3mf = await exportSceneTo3MF([obj], obj.name);
       folder.file(`${cleanName}.3mf`, blob3mf);
     }
+  }
+
+  // 1b. STEP AP214 assembly file — a single combined-assembly file (not per-part),
+  // since STEP natively describes a full assembly tree with world-space placement.
+  if (config.formats.includes('step_wireframe')) {
+    updateProgress('Generating STEP AP214 assembly file...');
+    const stepData = generateSTEPFile(objects, assemblyName, config.scaleMultiplier);
+    zip.file(`${assemblyName.replace(/[^a-zA-Z0-9_-]/g, '_')}_Assembly.step`, stepData);
   }
 
   // 2. Auxiliary BOM and Specs files

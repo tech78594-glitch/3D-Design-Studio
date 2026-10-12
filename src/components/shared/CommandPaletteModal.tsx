@@ -50,6 +50,7 @@ import {
   PenTool,
   Move3d,
   Scale,
+  ShieldCheck,
 } from 'lucide-react';
 
 export interface CommandItem {
@@ -101,6 +102,7 @@ interface CommandPaletteModalProps {
   onOpenCommentsModal: () => void;
   onOpenAutoOrientation?: () => void;
   onOpenBatchExport?: () => void;
+  onOpenEngineeringValidation?: () => void;
   onOpenHotkeyLegend?: () => void;
   onOpenSketchAnnotation?: () => void;
   onOpenARPreview?: () => void;
@@ -143,6 +145,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
   onOpenCommentsModal,
   onOpenAutoOrientation,
   onOpenBatchExport,
+  onOpenEngineeringValidation,
   onOpenHotkeyLegend,
   onOpenSketchAnnotation,
   onOpenARPreview,
@@ -372,6 +375,18 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
         action: () => {
           onClose();
           onOpenBatchExport?.();
+        },
+      },
+      {
+        id: 'tool_engineering_validation',
+        category: 'tools',
+        title: 'Engineering Validation: Stress Test & Manufacturability (DFM)',
+        subtitle: 'Structural safety-factor testing under applied load, plus process-aware DFM audit with cost & lead time',
+        badge: 'Test',
+        icon: <ShieldCheck className="w-4 h-4 text-rose-400" />,
+        action: () => {
+          onClose();
+          onOpenEngineeringValidation?.();
         },
       },
       {

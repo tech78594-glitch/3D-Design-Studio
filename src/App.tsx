@@ -65,6 +65,7 @@ import { AutoTextureModal } from './components/shared/AutoTextureModal';
 import { PhysicsSimulationModal } from './components/shared/PhysicsSimulationModal';
 import { DesignEngineModal } from './components/shared/DesignEngineModal';
 import { VoiceCommandInterface } from './components/shared/VoiceCommandInterface';
+import { EngineeringValidationModal } from './components/shared/EngineeringValidationModal';
 import { ChatMessage, LiveUserCursor } from './types/collaboration';
 import { VoiceCommandMatch } from './utils/voiceCommand';
 import { exportSceneToSTL, exportSceneToOBJ, exportSceneTo3MF } from './utils/cadEngine';
@@ -370,6 +371,7 @@ export default function App() {
   const [isPhysicsSimOpen, setIsPhysicsSimOpen] = useState(false);
   const [isDesignEngineOpen, setIsDesignEngineOpen] = useState(false);
   const [isVoiceCommandOpen, setIsVoiceCommandOpen] = useState(false);
+  const [isEngineeringValidationOpen, setIsEngineeringValidationOpen] = useState(false);
 
   // Auto Save Interval Preference State
   const [autoSaveIntervalPref, setAutoSaveIntervalPref] = useState<AutoSaveIntervalOption>(loadAutoSaveIntervalPref);
@@ -946,6 +948,7 @@ export default function App() {
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
         onOpenAutoOrientation={() => setIsAutoOrientationOpen(true)}
         onOpenBatchExport={() => setIsBatchExportOpen(true)}
+        onOpenEngineeringValidation={() => setIsEngineeringValidationOpen(true)}
         onOpenHotkeyLegend={() => setIsHotkeyLegendOpen(true)}
         onOpenSketchAnnotation={() => setIsSketchAnnotationOpen(true)}
         onOpenARPreview={() => setIsARPreviewOpen(true)}
@@ -1242,6 +1245,7 @@ export default function App() {
         onOpenCommentsModal={() => setIsCommentsModalOpen(true)}
         onOpenAutoOrientation={() => setIsAutoOrientationOpen(true)}
         onOpenBatchExport={() => setIsBatchExportOpen(true)}
+        onOpenEngineeringValidation={() => setIsEngineeringValidationOpen(true)}
         onOpenHotkeyLegend={() => setIsHotkeyLegendOpen(true)}
         onOpenSketchAnnotation={() => setIsSketchAnnotationOpen(true)}
         onOpenARPreview={() => setIsARPreviewOpen(true)}
@@ -1632,6 +1636,19 @@ export default function App() {
               break;
           }
         }}
+      />
+
+      {/* 17. Engineering Validation Studio — Structural Stress Test & Manufacturability (DFM) Modal */}
+      <EngineeringValidationModal
+        isOpen={isEngineeringValidationOpen}
+        onClose={() => setIsEngineeringValidationOpen(false)}
+        objects={currentObjects}
+        section={section}
+        assemblyName={
+          section === 'technology'
+            ? `${deviceConfig.name || 'Hardware'} Assembly`
+            : `${buildingConfig.style} Architectural BIM Project`
+        }
       />
 
       {loadingScreenEl}

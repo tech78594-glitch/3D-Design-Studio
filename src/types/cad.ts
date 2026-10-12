@@ -455,6 +455,7 @@ export const DEFAULT_CAD_TAGS: CADTag[] = [
   { id: 'tag_waterproof', label: 'IP68 Sealed', color: '#06b6d4' },
   { id: 'tag_recycled', label: '100% Recycled', color: '#10b981' },
   { id: 'tag_fastener', label: 'Standard M2.0', color: '#64748b' },
+  { id: 'tag_has_draft', label: 'Has Draft Angle (DFM)', color: '#facc15' },
 ];
 
 // ================= DESIGN ANALYTICS & TELEMETRY =================
@@ -474,6 +475,21 @@ export interface DesignAnalyticsMetrics {
 }
 
 // ================= DESIGN VERSIONING & REVISIONS =================
+export type ApprovalStatus = 'draft' | 'pending_review' | 'approved' | 'rejected' | 'released';
+
+export interface VersionApproval {
+  status: ApprovalStatus;
+  reviewer?: string;
+  decidedAt?: string;
+  notes?: string;
+  history: {
+    status: ApprovalStatus;
+    actor: string;
+    timestamp: string;
+    notes?: string;
+  }[];
+}
+
 export interface DesignVersion {
   id: string;
   versionNumber: string; // e.g. "v1.0.0", "v1.1.2"
@@ -490,6 +506,8 @@ export interface DesignVersion {
     bomCostUsd: number;
   };
   changeLog?: string[];
+  // PLM-style release gate: tracks the review/approval lifecycle of this revision
+  approval?: VersionApproval;
 }
 
 export interface VersionDiffResult {
@@ -780,7 +798,7 @@ export interface CADMassProperties {
 export interface MaterialDensityPreset {
   id: string;
   name: string;
-  category: 'Metal' | 'Plastic' | 'Composite' | 'Ceramic' | 'Elastomer' | 'Glass';
+  category: 'Metal' | 'Plastic' | 'Composite' | 'Ceramic' | 'Elastomer' | 'Glass' | 'Masonry' | 'Wood';
   densityGcm3: number;
   costPerKgUsd: number;
   yieldStrengthMpa?: number;
@@ -839,6 +857,87 @@ export interface SelectedEdgeInfo {
   filletRadiusMm?: number;
   chamferDistanceMm?: number;
   chainLengthMm?: number;
+}
+
+// ================= MANUFACTURING & DFM (DESIGN FOR MANUFACTURE) =================
+export type ManufacturingProcess =
+  | 'cnc_machining'
+  | 'injection_molding'
+  | 'fdm_3d_printing'
+  | 'sls_3d_printing'
+  | 'sheet_metal'
+  | 'general_construction';
+
+export interface ManufacturingProcessRules {
+  id: ManufacturingProcess;
+  name: string;
+  minWallThicknessMm: number;
+  minFeatureSizeMm: number;
+  maxAspectRatio: number;
+  requiresDraftAngle: boolean;
+  recommendedDraftAngleDeg: number;
+  setupCostUsd: number;
+  perPartLaborUsdPerCm3: number;
+  baseLeadTimeDays: number;
+  perPartLeadTimeDays: number;
+  description: string;
+}
+
+export type DFMSeverity = 'fail' | 'warning' | 'pass';
+
+export interface DFMFinding {
+  id: string;
+  partId: string;
+  partName: string;
+  ruleId: string;
+  severity: DFMSeverity;
+  message: string;
+  suggestedFix: string;
+  measuredValueMm?: number;
+  limitValueMm?: number;
+}
+
+export interface ManufacturabilityReport {
+  process: ManufacturingProcess;
+  processName: string;
+  generatedAt: string;
+  partCount: number;
+  findings: DFMFinding[];
+  failCount: number;
+  warningCount: number;
+  passCount: number;
+  overallVerdict: 'ready_for_production' | 'needs_revision' | 'blocked';
+  estimatedUnitCostUsd: number;
+  estimatedSetupCostUsd: number;
+  estimatedLeadTimeDays: number;
+}
+
+// ================= STRUCTURAL STRESS & SAFETY FACTOR TESTING =================
+export type StressLoadDirection = 'axial_tension' | 'axial_compression' | 'bending';
+
+export interface StressLoadCase {
+  appliedLoadN: number;
+  loadDirection: StressLoadDirection;
+  safetyFactorTarget: number;
+}
+
+export interface PartStressResult {
+  partId: string;
+  partName: string;
+  materialName: string;
+  yieldStrengthMpa: number;
+  crossSectionAreaMm2: number;
+  computedStressMpa: number;
+  safetyFactor: number;
+  verdict: 'pass' | 'marginal' | 'fail';
+}
+
+export interface StressAnalysisReport {
+  loadCase: StressLoadCase;
+  generatedAt: string;
+  results: PartStressResult[];
+  weakestPart?: PartStressResult;
+  overallVerdict: 'pass' | 'marginal' | 'fail';
 }
 
 

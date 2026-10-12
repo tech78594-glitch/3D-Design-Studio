@@ -211,7 +211,7 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
             <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
               Mesh & Data Formats to Generate
             </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
               {/* STL ASCII */}
               <div
                 onClick={() => toggleFormat('stl_ascii')}
@@ -275,6 +275,28 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
                 </div>
                 <p className="text-[11px] text-zinc-400">
                   Wavefront 3D mesh with companion PBR material definitions.
+                </p>
+              </div>
+
+              {/* STEP AP214 */}
+              <div
+                onClick={() => toggleFormat('step_wireframe')}
+                className={`cursor-pointer p-4 rounded-xl border transition-all ${
+                  formats.includes('step_wireframe')
+                    ? 'bg-indigo-950/30 border-indigo-500/60 ring-1 ring-indigo-500/30'
+                    : 'bg-zinc-800/40 border-zinc-700/60 hover:bg-zinc-800/70'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-indigo-300">.STEP (AP214)</span>
+                  {formats.includes('step_wireframe') ? (
+                    <CheckSquare className="w-4 h-4 text-indigo-400" />
+                  ) : (
+                    <Square className="w-4 h-4 text-zinc-600" />
+                  )}
+                </div>
+                <p className="text-[11px] text-zinc-400">
+                  Industry-standard assembly interchange for SolidWorks, Fusion 360, Onshape & FreeCAD.
                 </p>
               </div>
 

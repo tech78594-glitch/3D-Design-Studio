@@ -1,4 +1,11 @@
-import { CADObject, DesignVersion, VersionDiffResult } from '../types/cad';
+import { CADObject, DesignVersion, VersionDiffResult, VersionApproval } from '../types/cad';
+
+export function createDraftApproval(actor: string = 'CAD Systems Engineer'): VersionApproval {
+  return {
+    status: 'draft',
+    history: [{ status: 'draft', actor, timestamp: new Date().toISOString() }],
+  };
+}
 
 export function createVersionSnapshot(
   objects: CADObject[],
@@ -36,6 +43,7 @@ export function createVersionSnapshot(
       bomCostUsd: parseFloat(bomCostUsd.toFixed(2)),
     },
     changeLog: changeLog.length > 0 ? changeLog : ['Updated 3D geometry & assembly parameters'],
+    approval: createDraftApproval(author),
   };
 }
 
@@ -110,6 +118,59 @@ export function computeVersionDiff(versionA: DesignVersion, versionB: DesignVers
   };
 }
 
+/**
+ * PLM release-gate state machine: which approval transitions are legal from a given
+ * current status. Used to disable buttons for transitions that don't make sense
+ * (e.g. "Approve" on a version that was never submitted for review, or re-releasing
+ * an already-released version), not just to gate the final Release step.
+ *   draft         -> pending_review
+ *   pending_review -> approved | rejected
+ *   approved      -> released
+ *   rejected      -> pending_review (resubmit after addressing review feedback)
+ *   released      -> (terminal; no further transitions)
+ */
+const APPROVAL_TRANSITIONS: Record<VersionApproval['status'], VersionApproval['status'][]> = {
+  draft: ['pending_review'],
+  pending_review: ['approved', 'rejected'],
+  approved: ['released'],
+  rejected: ['pending_review'],
+  released: [],
+};
+
+export function canTransitionApproval(
+  currentStatus: VersionApproval['status'] | undefined,
+  targetStatus: VersionApproval['status']
+): boolean {
+  const from = currentStatus || 'draft';
+  return APPROVAL_TRANSITIONS[from].includes(targetStatus);
+}
+
+/**
+ * Applies a review/approval state transition to a version (PLM-style release gate)
+ * and appends an audit trail entry. Returns a new DesignVersion — callers should
+ * splice it back into versionHistory via onUpdateVersionHistory.
+ */
+export function transitionVersionApproval(
+  version: DesignVersion,
+  newStatus: VersionApproval['status'],
+  actor: string,
+  notes?: string
+): DesignVersion {
+  const prevApproval = version.approval || createDraftApproval(version.author);
+  const nextApproval: VersionApproval = {
+    status: newStatus,
+    reviewer: newStatus === 'draft' ? prevApproval.reviewer : actor,
+    decidedAt: new Date().toISOString(),
+    notes,
+    history: [
+      ...prevApproval.history,
+      { status: newStatus, actor, timestamp: new Date().toISOString(), notes },
+    ],
+  };
+
+  return { ...version, approval: nextApproval };
+}
+
 export function getDefaultVersionHistory(initialObjects: CADObject[]): DesignVersion[] {
   const v1Objects = JSON.parse(JSON.stringify(initialObjects));
   // Create slightly altered baseline for v1.0.0
@@ -131,6 +192,17 @@ export function getDefaultVersionHistory(initialObjects: CADObject[]): DesignVer
         bomCostUsd: 284.5,
       },
       changeLog: ['Established primary outer envelope geometry', 'Added battery cell cavity and mainboard brackets'],
+      approval: {
+        status: 'approved',
+        reviewer: 'J. Ive',
+        decidedAt: new Date(Date.now() - 86400000 * 2).toISOString(),
+        notes: 'Structural envelope approved for prototype tooling.',
+        history: [
+          { status: 'draft', actor: 'A. Stark', timestamp: new Date(Date.now() - 86400000 * 3).toISOString() },
+          { status: 'pending_review', actor: 'A. Stark', timestamp: new Date(Date.now() - 86400000 * 2.5).toISOString() },
+          { status: 'approved', actor: 'J. Ive', timestamp: new Date(Date.now() - 86400000 * 2).toISOString(), notes: 'Structural envelope approved for prototype tooling.' },
+        ],
+      },
     },
     {
       id: 'ver_init_002',
@@ -151,6 +223,14 @@ export function getDefaultVersionHistory(initialObjects: CADObject[]): DesignVer
         'Reinforced chassis side rails with 7000-series aerospace alloy',
         'Validated kinematic travel for tactile side buttons',
       ],
+      approval: {
+        status: 'pending_review',
+        reviewer: 'J. Ive',
+        history: [
+          { status: 'draft', actor: 'L. Chen', timestamp: new Date(Date.now() - 86400000 * 1.2).toISOString() },
+          { status: 'pending_review', actor: 'L. Chen', timestamp: new Date(Date.now() - 86400000 * 1).toISOString(), notes: 'Submitted for design & DFM review ahead of pilot build.' },
+        ],
+      },
     },
   ];
 }

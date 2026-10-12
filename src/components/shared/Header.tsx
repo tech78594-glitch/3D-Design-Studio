@@ -55,6 +55,7 @@ import {
   Activity,
   Sliders,
   Clock,
+  ShieldCheck,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { QuickTooltip } from './QuickTooltip';
@@ -100,6 +101,7 @@ interface HeaderProps {
   isExplodedPlayerOpen?: boolean;
   onOpenAutoOrientation?: () => void;
   onOpenBatchExport?: () => void;
+  onOpenEngineeringValidation?: () => void;
   onOpenHotkeyLegend?: () => void;
   onOpenSketchAnnotation?: () => void;
   isSketchAnnotationOpen?: boolean;
@@ -168,6 +170,7 @@ export const Header: React.FC<HeaderProps> = ({
   isExplodedPlayerOpen = false,
   onOpenAutoOrientation,
   onOpenBatchExport,
+  onOpenEngineeringValidation,
   onOpenHotkeyLegend,
   onOpenSketchAnnotation,
   isSketchAnnotationOpen = false,
@@ -603,6 +606,24 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <Compass className="w-3.5 h-3.5 text-sky-400" />
               <span className="hidden xl:inline">Auto-Orient</span>
+            </button>
+          </QuickTooltip>
+        )}
+
+        {/* Engineering Validation Studio Button (Structural Test & DFM) */}
+        {onOpenEngineeringValidation && (
+          <QuickTooltip content="Engineering Validation: Structural Stress Test & Manufacturability (DFM) Audit">
+            <button
+              id="btn_header_eng_validation"
+              onClick={onOpenEngineeringValidation}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                isLight
+                  ? 'bg-white hover:bg-slate-50 border-slate-300 text-slate-700 hover:text-rose-600 shadow-sm'
+                  : 'bg-zinc-950 hover:bg-zinc-900 border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-rose-400'
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-rose-400" />
+              <span className="hidden xl:inline">Validate</span>
             </button>
           </QuickTooltip>
         )}

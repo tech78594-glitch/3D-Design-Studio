@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { CADObject, CADConstraint, DesignVersion, VersionDiffResult } from '../../types/cad';
-import { createVersionSnapshot, computeVersionDiff } from '../../utils/versionManager';
+import { CADObject, CADConstraint, DesignVersion, VersionDiffResult, ApprovalStatus } from '../../types/cad';
+import { createVersionSnapshot, computeVersionDiff, transitionVersionApproval, canTransitionApproval } from '../../utils/versionManager';
 import {
   GitBranch,
   GitCommit,
@@ -23,7 +23,27 @@ import {
   GitCompare,
   ArrowUpRight,
   ArrowDownRight,
+  ShieldCheck,
+  ShieldAlert,
+  Send,
+  XCircle,
 } from 'lucide-react';
+
+const APPROVAL_LABELS: Record<ApprovalStatus, string> = {
+  draft: 'Draft',
+  pending_review: 'Pending Review',
+  approved: 'Approved',
+  rejected: 'Rejected',
+  released: 'Released',
+};
+
+const APPROVAL_STYLES: Record<ApprovalStatus, string> = {
+  draft: 'bg-zinc-800 border-zinc-600 text-zinc-300',
+  pending_review: 'bg-amber-950/60 border-amber-500/50 text-amber-300',
+  approved: 'bg-emerald-950/60 border-emerald-500/50 text-emerald-300',
+  rejected: 'bg-rose-950/60 border-rose-500/50 text-rose-300',
+  released: 'bg-indigo-950/60 border-indigo-500/50 text-indigo-300',
+};
 
 interface VersionManagerModalProps {
   isOpen: boolean;
@@ -64,6 +84,10 @@ export const VersionManagerModal: React.FC<VersionManagerModalProps> = ({
   const [newAuthor, setNewAuthor] = useState<string>('Lead CAD Engineer');
   const [newVersionType, setNewVersionType] = useState<DesignVersion['tag']>('milestone');
   const [newChangeLogItem, setNewChangeLogItem] = useState<string>('');
+  const [reviewerName, setReviewerName] = useState<string>('Lead CAD Engineer');
+  // User-editable note attached to the next approval-gate transition (Submit/Approve/
+  // Reject/Release), replacing the old hardcoded canned strings.
+  const [approvalNote, setApprovalNote] = useState<string>('');
   const [changeLogList, setChangeLogList] = useState<string[]>([
     'Refined component spatial envelope',
     'Updated assembly constraints & material specs',
@@ -103,6 +127,15 @@ export const VersionManagerModal: React.FC<VersionManagerModalProps> = ({
     setActiveTab('timeline');
     setNewTitle('');
     setNewDescription('');
+  };
+
+  const handleTransitionApproval = (status: ApprovalStatus, defaultNote: string) => {
+    if (!selectedVersion) return;
+    if (!canTransitionApproval(selectedVersion.approval?.status, status)) return;
+    const notes = approvalNote.trim() || defaultNote;
+    const updatedVersion = transitionVersionApproval(selectedVersion, status, reviewerName.trim() || 'Reviewer', notes);
+    onUpdateVersionHistory(versionHistory.map(v => (v.id === updatedVersion.id ? updatedVersion : v)));
+    setApprovalNote('');
   };
 
   // Diff Computation
@@ -214,8 +247,11 @@ export const VersionManagerModal: React.FC<VersionManagerModalProps> = ({
                         </span>
                       )}
                     </div>
-                    <div className="text-xs font-semibold text-zinc-200 truncate mt-1">
-                      {ver.title}
+                    <div className="text-xs font-semibold text-zinc-200 truncate mt-1 flex items-center gap-1.5">
+                      <span className="truncate">{ver.title}</span>
+                      <span className={`shrink-0 text-[9px] px-1.5 py-0.5 rounded-full border ${APPROVAL_STYLES[ver.approval?.status || 'draft']}`}>
+                        {APPROVAL_LABELS[ver.approval?.status || 'draft']}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between text-[11px] text-zinc-500 mt-2">
                       <span className="flex items-center gap-1">
@@ -261,6 +297,89 @@ export const VersionManagerModal: React.FC<VersionManagerModalProps> = ({
                     <RotateCcw className="w-4 h-4" />
                     <span>Rollback to this Version</span>
                   </button>
+                </div>
+
+                {/* PLM Review & Approval Gate */}
+                <div className="p-4 rounded-2xl bg-zinc-950/60 border border-zinc-800 space-y-3">
+                  <div className="flex items-center justify-between flex-wrap gap-3">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-indigo-400" />
+                      <span className="text-xs font-bold text-zinc-200">Release Gate / Approval Status:</span>
+                      <span
+                        className={`text-xs font-bold px-2.5 py-1 rounded-full border ${
+                          APPROVAL_STYLES[selectedVersion.approval?.status || 'draft']
+                        }`}
+                      >
+                        {APPROVAL_LABELS[selectedVersion.approval?.status || 'draft']}
+                      </span>
+                      {selectedVersion.approval?.reviewer && (
+                        <span className="text-[11px] text-zinc-500">
+                          Reviewer: <strong className="text-zinc-300">{selectedVersion.approval.reviewer}</strong>
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      value={reviewerName}
+                      onChange={e => setReviewerName(e.target.value)}
+                      placeholder="Your name (as actor)"
+                      className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 text-xs text-zinc-100 w-48"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <textarea
+                      value={approvalNote}
+                      onChange={e => setApprovalNote(e.target.value)}
+                      rows={2}
+                      placeholder="Review note for the next status change (optional — a sensible default is used if left blank)..."
+                      className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-zinc-100 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      onClick={() => handleTransitionApproval('pending_review', 'Submitted for design & DFM review.')}
+                      disabled={!canTransitionApproval(selectedVersion.approval?.status, 'pending_review')}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600/90 hover:bg-amber-500 disabled:opacity-40 disabled:hover:bg-amber-600/90 text-white text-xs font-semibold transition-colors"
+                    >
+                      <Send className="w-3.5 h-3.5" /> Submit for Review
+                    </button>
+                    <button
+                      onClick={() => handleTransitionApproval('approved', 'Approved for release.')}
+                      disabled={!canTransitionApproval(selectedVersion.approval?.status, 'approved')}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/90 hover:bg-emerald-500 disabled:opacity-40 disabled:hover:bg-emerald-600/90 text-white text-xs font-semibold transition-colors"
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5" /> Approve
+                    </button>
+                    <button
+                      onClick={() => handleTransitionApproval('rejected', 'Sent back for revision.')}
+                      disabled={!canTransitionApproval(selectedVersion.approval?.status, 'rejected')}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600/90 hover:bg-rose-500 disabled:opacity-40 disabled:hover:bg-rose-600/90 text-white text-xs font-semibold transition-colors"
+                    >
+                      <XCircle className="w-3.5 h-3.5" /> Reject
+                    </button>
+                    <button
+                      onClick={() => handleTransitionApproval('released', 'Released to production.')}
+                      disabled={!canTransitionApproval(selectedVersion.approval?.status, 'released')}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600/90 hover:bg-indigo-500 disabled:opacity-40 disabled:hover:bg-indigo-600/90 text-white text-xs font-semibold transition-colors"
+                    >
+                      <ShieldAlert className="w-3.5 h-3.5" /> Release to Production
+                    </button>
+                  </div>
+
+                  {selectedVersion.approval?.history && selectedVersion.approval.history.length > 0 && (
+                    <div className="pt-2 border-t border-zinc-800/80 space-y-1 max-h-24 overflow-y-auto">
+                      {selectedVersion.approval.history.slice().reverse().map((h, i) => (
+                        <div key={i} className="text-[11px] text-zinc-500 flex items-center gap-2">
+                          <span className={`px-1.5 py-0.5 rounded border ${APPROVAL_STYLES[h.status]}`}>{APPROVAL_LABELS[h.status]}</span>
+                          <span>by {h.actor}</span>
+                          <span>· {new Date(h.timestamp).toLocaleString()}</span>
+                          {h.notes && <span className="text-zinc-600">— {h.notes}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* KPI Metrics Summary */}

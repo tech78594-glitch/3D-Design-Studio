@@ -167,6 +167,57 @@ export const MATERIAL_DENSITY_DATABASE: MaterialDensityPreset[] = [
     color: '#a7f3d0',
     description: 'Chemically strengthened scratch-resistant display glass.',
   },
+  // --- Architectural / Construction materials (Building & BIM section) ---
+  {
+    id: 'mat_concrete_reinforced',
+    name: 'Reinforced Concrete (C30/37)',
+    category: 'Masonry',
+    densityGcm3: 2.40,
+    costPerKgUsd: 0.12,
+    yieldStrengthMpa: 30, // characteristic compressive strength
+    color: '#9ca3af',
+    description: 'Standard structural reinforced concrete for slabs, columns, and foundations.',
+  },
+  {
+    id: 'mat_structural_steel',
+    name: 'Structural Steel (A36)',
+    category: 'Metal',
+    densityGcm3: 7.85,
+    costPerKgUsd: 1.10,
+    yieldStrengthMpa: 250,
+    color: '#64748b',
+    description: 'Mild structural steel for beams, columns, and framing members.',
+  },
+  {
+    id: 'mat_glulam_timber',
+    name: 'Structural Glulam Timber',
+    category: 'Wood',
+    densityGcm3: 0.55,
+    costPerKgUsd: 1.80,
+    yieldStrengthMpa: 40, // characteristic bending strength
+    color: '#a1662f',
+    description: 'Engineered glue-laminated timber for structural framing and exposed beams.',
+  },
+  {
+    id: 'mat_fired_clay_brick',
+    name: 'Fired Clay Brick',
+    category: 'Masonry',
+    densityGcm3: 1.90,
+    costPerKgUsd: 0.30,
+    yieldStrengthMpa: 10, // typical compressive strength
+    color: '#b45309',
+    description: 'Standard fired-clay masonry unit for load-bearing and veneer walls.',
+  },
+  {
+    id: 'mat_gypsum_plaster',
+    name: 'Gypsum Plaster / Drywall',
+    category: 'Masonry',
+    densityGcm3: 0.75,
+    costPerKgUsd: 0.45,
+    yieldStrengthMpa: 2,
+    color: '#f5f5f4',
+    description: 'Interior partition and ceiling finish material — non-structural.',
+  },
 ];
 
 /**
@@ -175,6 +226,26 @@ export const MATERIAL_DENSITY_DATABASE: MaterialDensityPreset[] = [
 export function getMaterialPresetForCADObject(obj: CADObject): MaterialDensityPreset {
   const matName = (obj.material?.name || '').toLowerCase();
   const objName = (obj.name || '').toLowerCase();
+  const matType = obj.material?.type;
+
+  // Architectural materials (Building & BIM section) — match the typed MaterialType
+  // field first since building presets set this explicitly, then fall back to
+  // keywords for anything using a free-text material name.
+  if (matType === 'concrete' || matName.includes('concrete') || objName.includes('slab') || objName.includes('foundation')) {
+    return MATERIAL_DENSITY_DATABASE.find(m => m.id === 'mat_concrete_reinforced')!;
+  }
+  if (matType === 'steel_beam' || objName.includes('beam') || objName.includes('column') && matName.includes('steel')) {
+    return MATERIAL_DENSITY_DATABASE.find(m => m.id === 'mat_structural_steel')!;
+  }
+  if (matType === 'warm_wood' || matName.includes('timber') || matName.includes('wood') || objName.includes('joist') || objName.includes('rafter')) {
+    return MATERIAL_DENSITY_DATABASE.find(m => m.id === 'mat_glulam_timber')!;
+  }
+  if (matType === 'brick' || matName.includes('brick') || matName.includes('masonry')) {
+    return MATERIAL_DENSITY_DATABASE.find(m => m.id === 'mat_fired_clay_brick')!;
+  }
+  if (matType === 'white_plaster' || matName.includes('plaster') || matName.includes('gypsum') || matName.includes('drywall')) {
+    return MATERIAL_DENSITY_DATABASE.find(m => m.id === 'mat_gypsum_plaster')!;
+  }
 
   if (matName.includes('titan') || objName.includes('titan')) {
     return MATERIAL_DENSITY_DATABASE.find(m => m.id === 'mat_ti6al4v')!;
