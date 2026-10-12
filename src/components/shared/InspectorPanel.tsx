@@ -42,6 +42,9 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
   onOpenAutoOrientation,
   onOpenARPreview,
 }) => {
+  const isTouchDevice =
+    typeof window !== 'undefined' && (window.matchMedia?.('(pointer: coarse)').matches ?? 'ontouchstart' in window);
+
   if (!selectedObject) {
     return (
       <div id="inspector_empty_panel" className="h-full bg-zinc-900 text-zinc-400 p-5 flex flex-col justify-between border-l border-zinc-800">
@@ -66,19 +69,23 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
             <div className="space-y-1.5 text-[11px] text-zinc-400">
               <div className="flex justify-between">
                 <span>Orbit Rotate:</span>
-                <strong className="text-zinc-200 font-mono">Left Click + Drag</strong>
+                <strong className="text-zinc-200 font-mono">
+                  {isTouchDevice ? '1-Finger Drag' : 'Left Click + Drag'}
+                </strong>
               </div>
               <div className="flex justify-between">
                 <span>Pan Camera:</span>
-                <strong className="text-zinc-200 font-mono">Right Click + Drag</strong>
+                <strong className="text-zinc-200 font-mono">
+                  {isTouchDevice ? '2-Finger Drag' : 'Right Click + Drag'}
+                </strong>
               </div>
               <div className="flex justify-between">
                 <span>Zoom In/Out:</span>
-                <strong className="text-zinc-200 font-mono">Scroll Wheel</strong>
+                <strong className="text-zinc-200 font-mono">{isTouchDevice ? 'Pinch' : 'Scroll Wheel'}</strong>
               </div>
               <div className="flex justify-between">
                 <span>Select Object:</span>
-                <strong className="text-zinc-200 font-mono">Left Click Mesh</strong>
+                <strong className="text-zinc-200 font-mono">{isTouchDevice ? 'Tap Mesh' : 'Left Click Mesh'}</strong>
               </div>
             </div>
           </div>

@@ -8,6 +8,45 @@ export interface BoundingBox3D {
 }
 
 /**
+ * Whether a rotation (radians) is within ~1 degree of an odd multiple of 90° (i.e. a quarter or
+ * three-quarter turn). At those angles a box's world-axis extents are exactly a permutation of
+ * its local width/height/depth, so the AABB can be corrected exactly without full OBB math.
+ */
+function isQuarterTurn(rad: number): boolean {
+  const deg = ((rad * 180) / Math.PI) % 360;
+  const mod180 = ((deg % 180) + 180) % 180;
+  return Math.abs(mod180 - 90) < 1;
+}
+
+/**
+ * Permutes a part's local [width, height, depth] extents to account for axis-aligned rotation
+ * (0/90/180/270° turns, the overwhelming majority of rotations used in this app's presets).
+ * Rotating about X swaps the Y/Z extents, about Y swaps X/Z, about Z swaps X/Y. Non-axis-aligned
+ * rotations (rare, e.g. 45° trims) are left as-is — an approximation, but strictly no worse than
+ * ignoring rotation entirely.
+ */
+function applyRotationToExtents(
+  extents: [number, number, number],
+  rotation: [number, number, number] | undefined
+): [number, number, number] {
+  if (!rotation) return extents;
+  let [ex, ey, ez] = extents;
+  const [rx, ry, rz] = rotation;
+
+  if (isQuarterTurn(rx)) {
+    [ey, ez] = [ez, ey];
+  }
+  if (isQuarterTurn(ry)) {
+    [ex, ez] = [ez, ex];
+  }
+  if (isQuarterTurn(rz)) {
+    [ex, ey] = [ey, ex];
+  }
+
+  return [ex, ey, ez];
+}
+
+/**
  * Calculates accurate 3D AABB bounding box for any CAD object primitive
  */
 export function getObjectBoundingBox(obj: CADObject): BoundingBox3D {
@@ -35,6 +74,8 @@ export function getObjectBoundingBox(obj: CADObject): BoundingBox3D {
     rawD = r * 2;
     rawH = dims.height || 5;
   }
+
+  [rawW, rawH, rawD] = applyRotationToExtents([rawW, rawH, rawD], obj.rotation);
 
   const halfW = (rawW * sx) / 2;
   const halfH = (rawH * sy) / 2;

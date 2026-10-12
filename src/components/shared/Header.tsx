@@ -270,16 +270,16 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header
       id="app_header"
-      className={`h-14 border-b px-3 sm:px-4 flex items-center justify-between select-none z-20 shrink-0 transition-colors ${
+      className={`h-14 border-b px-3 sm:px-4 flex items-center justify-between gap-2 select-none z-20 shrink-0 transition-colors overflow-x-auto scrollbar-none backdrop-blur-xl ${
         isLight
-          ? 'bg-slate-100/95 border-slate-300 text-slate-900 shadow-sm'
+          ? 'bg-slate-100/80 border-slate-300 text-slate-900 shadow-sm'
           : isBlueprint
-          ? 'bg-[#001733]/95 border-blue-900/80 text-cyan-100 shadow-md'
-          : 'bg-zinc-900/95 border-zinc-800 text-zinc-100'
+          ? 'bg-[#001733]/80 border-blue-900/80 text-cyan-100 shadow-md'
+          : 'bg-zinc-900/80 border-zinc-800 text-zinc-100'
       }`}
     >
       {/* Left: Brand Identity, Section Switcher & Quick Command Search */}
-      <div className="flex items-center gap-2.5 sm:gap-3.5">
+      <div className="flex items-center gap-2.5 sm:gap-3.5 shrink-0">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-medium shadow-md">
             <Box className="w-4 h-4" />
@@ -346,28 +346,45 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Quick Commands & Global Search Trigger Bar */}
         {onOpenCommandPalette && (
-          <QuickTooltip content="Search Parts, Tools & Commands" shortcut="⌘K / Ctrl+K">
+          <>
+            <QuickTooltip content="Search Parts, Tools & Commands" shortcut="⌘K / Ctrl+K">
+              <button
+                id="btn_header_quick_commands"
+                onClick={onOpenCommandPalette}
+                className={`hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
+                  isLight
+                    ? 'bg-white hover:bg-slate-50 border-slate-300 text-slate-600 hover:text-slate-900 shadow-sm'
+                    : 'bg-zinc-950/80 hover:bg-zinc-900 border-zinc-800 hover:border-zinc-700 text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                <Search className="w-3.5 h-3.5 text-cyan-400" />
+                <span className="text-zinc-400">Quick Commands & Search...</span>
+                <kbd className="bg-zinc-800/80 text-cyan-300 text-[10px] font-mono px-1.5 py-0.5 rounded border border-zinc-700">
+                  ⌘K
+                </kbd>
+              </button>
+            </QuickTooltip>
+
+            {/* Icon-only Quick Search trigger for narrower (tablet/phone) widths, where the
+                full pill above is hidden and would otherwise be unreachable. */}
             <button
-              id="btn_header_quick_commands"
+              id="btn_header_quick_commands_compact"
               onClick={onOpenCommandPalette}
-              className={`hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
+              title="Quick Commands & Search"
+              className={`flex lg:hidden items-center justify-center p-2 rounded-lg border transition-all ${
                 isLight
                   ? 'bg-white hover:bg-slate-50 border-slate-300 text-slate-600 hover:text-slate-900 shadow-sm'
                   : 'bg-zinc-950/80 hover:bg-zinc-900 border-zinc-800 hover:border-zinc-700 text-zinc-400 hover:text-zinc-200'
               }`}
             >
-              <Search className="w-3.5 h-3.5 text-cyan-400" />
-              <span className="text-zinc-400">Quick Commands & Search...</span>
-              <kbd className="bg-zinc-800/80 text-cyan-300 text-[10px] font-mono px-1.5 py-0.5 rounded border border-zinc-700">
-                ⌘K
-              </kbd>
+              <Search className="w-4 h-4 text-cyan-400" />
             </button>
-          </QuickTooltip>
+          </>
         )}
       </div>
 
       {/* Middle: Studio Viewport Controls & Feature Studios */}
-      <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto py-1 scrollbar-none">
+      <div className="flex-1 min-w-0 flex items-center gap-1 sm:gap-1.5 overflow-x-auto py-1 scrollbar-none">
         {/* Render Shader Mode Selector */}
         <div className={`hidden 2xl:flex items-center rounded-lg p-0.5 border text-xs ${isLight ? 'bg-slate-200 border-slate-300' : 'bg-zinc-950 border-zinc-800'}`}>
           {(
@@ -787,7 +804,7 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Right: Auto-Save Status, Theme Switcher, Undo/Redo & Model Export / Import Menu */}
-      <div className="flex items-center gap-1.5 sm:gap-2">
+      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
         {/* Auto-Save Status Badge & Dropdown */}
         <div className="relative">
           <QuickTooltip content="Auto-Save & Persistence Status">

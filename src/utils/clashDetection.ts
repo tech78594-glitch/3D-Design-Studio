@@ -10,6 +10,46 @@ export const DEFAULT_CLASH_SETTINGS: ClashDetectionSettings = {
 };
 
 /**
+ * True when `inner`'s bounding box sits entirely within `outer`'s on every axis (within a small
+ * tolerance). Full containment is the geometric signature of a part designed to nest inside an
+ * enclosure, as opposed to two parts that merely overlap where they shouldn't.
+ */
+function isBoxFullyContained(inner: BoundingBox3D, outer: BoundingBox3D, marginMm = 0.05): boolean {
+  return (
+    inner.min[0] >= outer.min[0] - marginMm &&
+    inner.max[0] <= outer.max[0] + marginMm &&
+    inner.min[1] >= outer.min[1] - marginMm &&
+    inner.max[1] <= outer.max[1] + marginMm &&
+    inner.min[2] >= outer.min[2] - marginMm &&
+    inner.max[2] <= outer.max[2] + marginMm
+  );
+}
+
+function boxVolume(box: BoundingBox3D): number {
+  return (box.max[0] - box.min[0]) * (box.max[1] - box.min[1]) * (box.max[2] - box.min[2]);
+}
+
+/**
+ * Detects the common false-positive case where one part's bounding box fully contains a
+ * meaningfully smaller part — a chassis wrapping its internal components, a lens recessed into a
+ * camera island, a fastener sunk into its socket. Bounding-box collision can't tell a hollow
+ * enclosure or a mounting cutout from a solid block, so without this check any component
+ * deliberately nested into its host would permanently register as a "critical clash" — a false
+ * positive from the collision math, not a real design defect. Genuine placement mistakes almost
+ * never produce full containment on all three axes; they produce partial overlap, which this
+ * check does not touch.
+ */
+function isExpectedNestedMounting(boxA: BoundingBox3D, boxB: BoundingBox3D): boolean {
+  const volumeA = boxVolume(boxA);
+  const volumeB = boxVolume(boxB);
+
+  const bNestedInA = volumeB <= volumeA * 0.6 && isBoxFullyContained(boxB, boxA);
+  const aNestedInB = volumeA <= volumeB * 0.6 && isBoxFullyContained(boxA, boxB);
+
+  return bNestedInA || aNestedInB;
+}
+
+/**
  * Checks overlap and calculates interference metrics between two CAD objects
  */
 export function checkPairInterference(
@@ -48,6 +88,12 @@ export function checkPairInterference(
 
   // Direct intersection check
   const isDirectClash = overlapX > 0 && overlapY > 0 && overlapZ > 0;
+
+  // A part fully nested inside a much larger host (its designed home) is not a real
+  // interference, no matter how large the bounding-box overlap volume looks.
+  if (isDirectClash && isExpectedNestedMounting(boxA, boxB)) {
+    return null;
+  }
 
   if (isDirectClash) {
     const volumeMm3 = overlapX * overlapY * overlapZ;

@@ -246,65 +246,65 @@ export const TechnologyDesigner: React.FC<TechnologyDesignerProps> = ({
   return (
     <div id="technology_designer_panel" className="flex flex-col h-full bg-zinc-900 text-zinc-200 border-r border-zinc-800">
       {/* Sub-Header Tabs */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 bg-zinc-900/90">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-zinc-800 text-blue-400 border border-zinc-700/60">
+      <div className="px-4 py-3 pr-10 border-b border-zinc-800 bg-zinc-900/90 space-y-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="p-1.5 rounded-lg bg-zinc-800 text-blue-400 border border-zinc-700/60 shrink-0">
             <Cpu className="w-5 h-5" />
           </div>
-          <div>
-            <h2 className="text-sm font-semibold tracking-tight text-zinc-100 flex items-center gap-2">
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold tracking-tight text-zinc-100 flex items-center flex-wrap gap-x-2 gap-y-1">
               Device CAD Studio
               <span className="text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded-full uppercase tracking-wider">
                 Major Workspace
               </span>
             </h2>
-            <p className="text-[11px] text-zinc-400 font-normal">Precision Electronics & Stark Holographic Disassembly</p>
+            <p className="text-[11px] text-zinc-400 font-normal truncate">Precision Electronics & Stark Holographic Disassembly</p>
           </div>
         </div>
 
         {/* Quick Studio Modals */}
-        <div className="flex items-center gap-1.5">
+        <div className="grid grid-cols-2 gap-1.5">
           {onOpenHolographicStudio && (
             <button
               onClick={onOpenHolographicStudio}
-              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 text-xs font-medium transition-colors border border-blue-500/40 shadow-sm"
+              className="flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 text-xs font-medium transition-colors border border-blue-500/40 shadow-sm"
               title="Open Holographic Exploded Studio"
             >
-              <Sparkles className="w-3.5 h-3.5 text-blue-400" />
-              <span>Holo Studio</span>
+              <Sparkles className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+              <span className="truncate">Holo Studio</span>
             </button>
           )}
 
           {onOpenPBRReview && (
             <button
               onClick={onOpenPBRReview}
-              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium transition-colors border border-zinc-700"
+              className="flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium transition-colors border border-zinc-700"
               title="Open Real-time PBR Review Modal"
             >
-              <Eye className="w-3.5 h-3.5 text-blue-400" />
-              <span>PBR Review</span>
+              <Eye className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+              <span className="truncate">PBR Review</span>
             </button>
           )}
 
           {onOpenMaterialLibrary && (
             <button
               onClick={onOpenMaterialLibrary}
-              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium transition-colors border border-zinc-700"
+              className="flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium transition-colors border border-zinc-700"
               title="Open CAD Material Library"
             >
-              <Paintbrush className="w-3.5 h-3.5 text-blue-400" />
-              <span>Materials</span>
+              <Paintbrush className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+              <span className="truncate">Materials</span>
             </button>
           )}
 
           {onOpenSnapshotStudio && (
             <button
               onClick={onOpenSnapshotStudio}
-              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium transition-colors border border-zinc-700"
+              className="flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium transition-colors border border-zinc-700"
               title="Open High-Res Snapshot Studio"
             >
-              <Camera className="w-3.5 h-3.5 text-blue-400" />
-              <span>Snapshot</span>
+              <Camera className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+              <span className="truncate">Snapshot</span>
             </button>
           )}
         </div>

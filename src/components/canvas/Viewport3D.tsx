@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import {
   CADObject,
   DesignSection,
@@ -44,6 +45,12 @@ import {
   Scale,
   Sparkles,
 } from 'lucide-react';
+
+// Studio environment (IBL) map is expensive to generate (a GPU readback) and is purely
+// generic ambient lighting — it doesn't depend on scene contents, so it's generated once
+// and cached/reused across every scene re-init (e.g. on every object edit, which recreates
+// the whole renderer/scene) instead of being recomputed each time.
+let cachedEnvTexture: THREE.Texture | null = null;
 
 interface Viewport3DProps {
   section: DesignSection;
@@ -143,6 +150,7 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
   const edgeVisualsGroupRef = useRef<THREE.Group | null>(null);
   const measurementsGroupRef = useRef<THREE.Group | null>(null);
   const commentsGroupRef = useRef<THREE.Group | null>(null);
+  const shadowCatcherRef = useRef<THREE.Mesh | null>(null);
 
   // Hovered edge for smart selection
   const [hoveredEdge, setHoveredEdge] = useState<CADEdge | null>(null);
@@ -153,6 +161,12 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
   const previousMousePositionRef = useRef({ x: 0, y: 0 });
   const sphericalRef = useRef({ radius: 250, theta: Math.PI / 4, phi: Math.PI / 3 });
   const targetRef = useRef(new THREE.Vector3(0, 0, 0));
+
+  // Multi-touch navigation state (pinch-to-zoom / two-finger pan on mobile)
+  const activePointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const pinchStartDistRef = useRef<number | null>(null);
+  const pinchStartRadiusRef = useRef<number | null>(null);
+  const twoFingerMidRef = useRef<{ x: number; y: number } | null>(null);
 
   // FPS Diagnostics & UI states
   const [fps, setFps] = useState<number>(60);
@@ -305,6 +319,37 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
+    // Studio Environment Reflections (soft-box style IBL for PBR metals & glass).
+    // Generated once and cached — regenerating this on every scene re-init (which
+    // happens on every object edit) would trigger a GPU readback stall each time.
+    // The first-ever generation is deferred slightly so its (synchronous, GPU-bound)
+    // readback can't block the app's entry loading screen or initial interactivity.
+    let envTimeoutId: number | null = null;
+    if (cachedEnvTexture) {
+      scene.environment = cachedEnvTexture;
+    } else {
+      envTimeoutId = window.setTimeout(() => {
+        const pmremGenerator = new THREE.PMREMGenerator(renderer);
+        const envRenderTarget = pmremGenerator.fromScene(new RoomEnvironment(), 0.04);
+        cachedEnvTexture = envRenderTarget.texture;
+        if (sceneRef.current === scene) {
+          scene.environment = cachedEnvTexture;
+        }
+        pmremGenerator.dispose();
+      }, 1400);
+    }
+
+    // Soft Contact-Shadow Ground Catcher (product-photography style floor shadow)
+    const shadowCatcherGeometry = new THREE.PlaneGeometry(4000, 4000);
+    const shadowCatcherMaterial = new THREE.ShadowMaterial({ opacity: 0.32, transparent: true });
+    const shadowCatcher = new THREE.Mesh(shadowCatcherGeometry, shadowCatcherMaterial);
+    shadowCatcher.rotation.x = -Math.PI / 2;
+    shadowCatcher.position.y =
+      section === 'technology' ? -deviceConfig.dimensions.height / 2 - 20 : -0.01;
+    shadowCatcher.receiveShadow = true;
+    scene.add(shadowCatcher);
+    shadowCatcherRef.current = shadowCatcher;
+
     // Lighting group
     const lightsGroup = new THREE.Group();
     scene.add(lightsGroup);
@@ -412,6 +457,11 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     return () => {
       cancelAnimationFrame(animationFrameId);
       resizeObserver.disconnect();
+      if (envTimeoutId !== null) window.clearTimeout(envTimeoutId);
+      // Note: the cached studio environment texture (cachedEnvTexture) is intentionally
+      // NOT disposed here — it's reused across every scene re-init for the app's lifetime.
+      shadowCatcherGeometry.dispose();
+      shadowCatcherMaterial.dispose();
       if (rendererRef.current && container.contains(rendererRef.current.domElement)) {
         container.removeChild(rendererRef.current.domElement);
         rendererRef.current.dispose();
@@ -604,6 +654,15 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       gridGroup.add(axes);
     }
   }, [gridVisible, section, deviceConfig.dimensions.height, themeMode]);
+
+  // Keep the contact-shadow floor aligned with the grid plane, independent of grid visibility
+  // (the soft shadow should stay even when the user hides the reference grid lines)
+  useEffect(() => {
+    const shadowCatcher = shadowCatcherRef.current;
+    if (!shadowCatcher) return;
+    shadowCatcher.position.y =
+      section === 'technology' ? -deviceConfig.dimensions.height / 2 - 20 : -0.01;
+  }, [section, deviceConfig.dimensions.height]);
 
   // Update Slicing Plane
   useEffect(() => {
@@ -1007,8 +1066,23 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
 
   // Handle Pointer Events
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    mountRef.current?.setPointerCapture?.(e.pointerId);
+    activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    // Second finger just landed: switch from single-finger orbit to pinch/pan.
+    if (activePointersRef.current.size >= 2) {
+      isDraggingRef.current = false;
+      const pts = Array.from(activePointersRef.current.values()).slice(0, 2);
+      const dx = pts[0].x - pts[1].x;
+      const dy = pts[0].y - pts[1].y;
+      pinchStartDistRef.current = Math.hypot(dx, dy);
+      pinchStartRadiusRef.current = sphericalRef.current.radius;
+      twoFingerMidRef.current = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+      return;
+    }
+
     isDraggingRef.current = true;
-    dragButtonRef.current = e.button;
+    dragButtonRef.current = e.pointerType === 'touch' ? 0 : e.button;
     previousMousePositionRef.current = { x: e.clientX, y: e.clientY };
 
     if (e.button === 0 && mountRef.current && cameraRef.current && sceneRef.current) {
@@ -1114,6 +1188,42 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (activePointersRef.current.has(e.pointerId)) {
+      activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+
+    // Two fingers down: pinch-to-zoom + two-finger pan, independent of the single-drag path below.
+    if (activePointersRef.current.size >= 2) {
+      const pts = Array.from(activePointersRef.current.values()).slice(0, 2);
+      const dx = pts[0].x - pts[1].x;
+      const dy = pts[0].y - pts[1].y;
+      const dist = Math.hypot(dx, dy);
+
+      if (pinchStartDistRef.current && pinchStartRadiusRef.current != null) {
+        const scale = pinchStartDistRef.current / Math.max(dist, 1);
+        const minZoom = section === 'technology' ? 20 : 3;
+        const maxZoom = section === 'technology' ? 800 : 150;
+        sphericalRef.current.radius = Math.max(minZoom, Math.min(maxZoom, pinchStartRadiusRef.current * scale));
+      }
+
+      const mid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+      if (twoFingerMidRef.current) {
+        const deltaX = mid.x - twoFingerMidRef.current.x;
+        const deltaY = mid.y - twoFingerMidRef.current.y;
+        const panSpeed = section === 'technology' ? 0.35 : 0.05;
+        const right = new THREE.Vector3();
+        const up = new THREE.Vector3(0, 1, 0);
+        if (cameraRef.current) {
+          cameraRef.current.getWorldDirection(right);
+          right.cross(up).normalize();
+        }
+        targetRef.current.addScaledVector(right, -deltaX * panSpeed);
+        targetRef.current.y += deltaY * panSpeed;
+      }
+      twoFingerMidRef.current = mid;
+      return;
+    }
+
     if (!isDraggingRef.current) {
       if (isEdgeSelectionMode && mountRef.current && cameraRef.current && extractedSceneEdges.length > 0) {
         const rect = mountRef.current.getBoundingClientRect();
@@ -1159,8 +1269,25 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     }
   };
 
-  const handlePointerUp = () => {
-    isDraggingRef.current = false;
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    activePointersRef.current.delete(e.pointerId);
+    mountRef.current?.releasePointerCapture?.(e.pointerId);
+
+    if (activePointersRef.current.size === 0) {
+      isDraggingRef.current = false;
+      pinchStartDistRef.current = null;
+      pinchStartRadiusRef.current = null;
+      twoFingerMidRef.current = null;
+    } else if (activePointersRef.current.size === 1) {
+      // Lifted one of two fingers: resume single-finger orbit from the remaining touch point.
+      const remaining = Array.from(activePointersRef.current.values())[0];
+      previousMousePositionRef.current = remaining;
+      isDraggingRef.current = true;
+      dragButtonRef.current = 0;
+      pinchStartDistRef.current = null;
+      pinchStartRadiusRef.current = null;
+      twoFingerMidRef.current = null;
+    }
   };
 
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
@@ -1209,10 +1336,11 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       {/* Three.js Canvas Container */}
       <div
         ref={mountRef}
-        className="w-full h-full cursor-grab active:cursor-grabbing"
+        className="w-full h-full cursor-grab active:cursor-grabbing touch-none"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
         onWheel={handleWheel}
       />
 

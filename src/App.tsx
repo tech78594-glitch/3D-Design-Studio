@@ -86,13 +86,49 @@ import {
   getAutoSaveIntervalMs,
 } from './utils/autoSave';
 import confetti from 'canvas-confetti';
+import { PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Box } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 
 export default function App() {
+  // App Entry Loading Screen — gives the 3D scene/assets a brief, branded moment to initialize
+  // instead of popping straight into the workspace.
+  const [isAppLoading, setIsAppLoading] = useState(true);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setIsAppLoading(false), 1100);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   // Theme state: Dark, Light, Blueprint
   const [themeMode, setThemeMode] = useState<StudioThemeMode>('dark');
 
   // Primary active section - defaults to Technology & Device Design (Major Section)
   const [section, setSection] = useState<DesignSection>('technology');
+
+  // Mobile Phone Layout Detection (panels become full-screen slide-overs below this width)
+  const MOBILE_BREAKPOINT_PX = 768;
+  const getIsMobileViewport = () =>
+    typeof window !== 'undefined' && window.innerWidth < MOBILE_BREAKPOINT_PX;
+  const [isMobile, setIsMobile] = useState<boolean>(getIsMobileViewport);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(getIsMobileViewport());
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Side Panel Minimize/Maximize State (panels start closed on phones so the 3D view is visible)
+  const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState<boolean>(getIsMobileViewport);
+  const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState<boolean>(getIsMobileViewport);
+
+  // On phones only one full-screen panel makes sense at a time.
+  const openLeftPanel = () => {
+    setIsLeftPanelCollapsed(false);
+    if (getIsMobileViewport()) setIsRightPanelCollapsed(true);
+  };
+  const openRightPanel = () => {
+    setIsRightPanelCollapsed(false);
+    if (getIsMobileViewport()) setIsLeftPanelCollapsed(true);
+  };
 
   // Technology Section State
   const [deviceConfig, setDeviceConfig] = useState<DeviceConfig>(DEVICE_PRESETS.smartphone_pro.config);
@@ -878,15 +914,29 @@ export default function App() {
       {/* Main 3-Column Studio Workspace */}
       <div className="flex-1 flex overflow-hidden relative">
         {/* Left Side: Major Section (Technology CAD) or Secondary (Building CAD) */}
+        {!isLeftPanelCollapsed && (
         <div
-          className={`w-80 md:w-96 shrink-0 h-full border-r z-10 overflow-hidden transition-colors ${
+          className={`${
+            isMobile ? 'fixed inset-x-0 top-14 bottom-0 z-40 w-full' : 'w-80 md:w-96 shrink-0 relative z-10'
+          } h-full border-r overflow-hidden transition-colors shadow-2xl ${
             isLight
-              ? 'bg-white border-slate-200 text-slate-900'
+              ? 'bg-white/90 backdrop-blur-xl border-slate-200 text-slate-900'
               : isBlueprint
-              ? 'bg-[#001f44] border-blue-900/60 text-cyan-100'
-              : 'bg-zinc-900 border-zinc-800 text-zinc-100'
+              ? 'bg-[#001f44]/90 backdrop-blur-xl border-blue-900/60 text-cyan-100'
+              : 'bg-zinc-900/90 backdrop-blur-xl border-zinc-800 text-zinc-100'
           }`}
         >
+          <button
+            onClick={() => setIsLeftPanelCollapsed(true)}
+            title="Minimize panel"
+            className={`absolute top-2 right-2 z-30 p-1.5 rounded-lg border transition-colors ${
+              isLight
+                ? 'bg-white/90 hover:bg-slate-100 border-slate-300 text-slate-500 hover:text-slate-800'
+                : 'bg-zinc-900/90 hover:bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white'
+            }`}
+          >
+            <PanelLeftClose className="w-3.5 h-3.5" />
+          </button>
           {section === 'technology' ? (
             <TechnologyDesigner
               config={deviceConfig}
@@ -932,6 +982,20 @@ export default function App() {
             />
           )}
         </div>
+        )}
+        {isLeftPanelCollapsed && (
+          <button
+            onClick={openLeftPanel}
+            title="Expand panel"
+            className={`absolute left-2 top-1/2 -translate-y-1/2 z-30 p-2 rounded-lg border shadow-lg transition-colors ${
+              isLight
+                ? 'bg-white/90 hover:bg-slate-100 border-slate-300 text-slate-600 hover:text-slate-900'
+                : 'bg-zinc-900/90 hover:bg-zinc-800 border-zinc-700 text-zinc-300 hover:text-white'
+            }`}
+          >
+            <PanelLeftOpen className="w-4 h-4" />
+          </button>
+        )}
 
         {/* Center: 3D Interactive WebGL Canvas Viewport */}
         <div className="flex-1 h-full relative overflow-hidden">
@@ -1018,15 +1082,29 @@ export default function App() {
         </div>
 
         {/* Right Side: CAD Properties & Material Inspector Panel */}
+        {!isRightPanelCollapsed && (
         <div
-          className={`w-72 md:w-80 shrink-0 h-full border-l z-10 overflow-hidden transition-colors ${
+          className={`${
+            isMobile ? 'fixed inset-x-0 top-14 bottom-0 z-40 w-full' : 'w-72 md:w-80 shrink-0 relative z-10'
+          } h-full border-l overflow-hidden transition-colors shadow-2xl ${
             isLight
-              ? 'bg-white border-slate-200 text-slate-900'
+              ? 'bg-white/90 backdrop-blur-xl border-slate-200 text-slate-900'
               : isBlueprint
-              ? 'bg-[#001f44] border-blue-900/60 text-cyan-100'
-              : 'bg-zinc-900 border-zinc-800 text-zinc-100'
+              ? 'bg-[#001f44]/90 backdrop-blur-xl border-blue-900/60 text-cyan-100'
+              : 'bg-zinc-900/90 backdrop-blur-xl border-zinc-800 text-zinc-100'
           }`}
         >
+          <button
+            onClick={() => setIsRightPanelCollapsed(true)}
+            title="Minimize panel"
+            className={`absolute top-2 left-2 z-30 p-1.5 rounded-lg border transition-colors ${
+              isLight
+                ? 'bg-white/90 hover:bg-slate-100 border-slate-300 text-slate-500 hover:text-slate-800'
+                : 'bg-zinc-900/90 hover:bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white'
+            }`}
+          >
+            <PanelRightClose className="w-3.5 h-3.5" />
+          </button>
           <InspectorPanel
             selectedObject={selectedObject}
             onUpdateObject={handleUpdateObject}
@@ -1038,6 +1116,20 @@ export default function App() {
             onOpenARPreview={() => setIsARPreviewOpen(true)}
           />
         </div>
+        )}
+        {isRightPanelCollapsed && (
+          <button
+            onClick={openRightPanel}
+            title="Expand panel"
+            className={`absolute right-2 top-1/2 -translate-y-1/2 z-30 p-2 rounded-lg border shadow-lg transition-colors ${
+              isLight
+                ? 'bg-white/90 hover:bg-slate-100 border-slate-300 text-slate-600 hover:text-slate-900'
+                : 'bg-zinc-900/90 hover:bg-zinc-800 border-zinc-700 text-zinc-300 hover:text-white'
+            }`}
+          >
+            <PanelRightOpen className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       {/* Global Quick Commands & Search Palette Modal */}
@@ -1467,6 +1559,54 @@ export default function App() {
           }
         }}
       />
+
+      {/* App Entry Loading Screen */}
+      <AnimatePresence>
+        {isAppLoading && (
+          <motion.div
+            key="app-loading-screen"
+            className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-5 bg-zinc-950"
+            initial={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.5, ease: 'easeInOut' }}
+          >
+            <motion.div
+              className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-2xl shadow-blue-500/30"
+              initial={{ scale: 0.6, opacity: 0, rotate: -8 }}
+              animate={{ scale: 1, opacity: 1, rotate: 0 }}
+              transition={{ duration: 0.5, ease: 'easeOut' }}
+            >
+              <Box className="w-8 h-8 text-white" />
+            </motion.div>
+            <motion.div
+              className="flex flex-col items-center gap-2"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.15 }}
+            >
+              <span className="text-sm font-bold tracking-wider uppercase text-zinc-100 flex items-center gap-1.5">
+                3D CAD Studio
+                <span className="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                  PRO
+                </span>
+              </span>
+              <span className="text-[11px] font-mono text-zinc-500">Initializing Studio Workspace...</span>
+            </motion.div>
+            <motion.div
+              className="w-40 h-1 rounded-full bg-zinc-800 overflow-hidden"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.2 }}
+            >
+              <motion.div
+                className="h-full w-1/3 rounded-full bg-gradient-to-r from-blue-500 to-indigo-500"
+                animate={{ x: ['-100%', '220%'] }}
+                transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}
+              />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
