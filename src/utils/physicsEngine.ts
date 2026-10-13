@@ -13,6 +13,7 @@ export interface PhysicsBody {
   friction: number;
   isStatic: boolean;
   boundingBox: THREE.Box3;
+  halfHeightMm: number;
   trajectory: THREE.Vector3[];
 }
 
@@ -73,6 +74,7 @@ export class CADPhysicsEngine {
         friction: 0.3,
         isStatic: obj.locked || obj.primitive === 'slab' || obj.primitive === 'wall',
         boundingBox: bbox,
+        halfHeightMm: halfH,
         trajectory: [pos.clone()],
       };
 
@@ -100,10 +102,12 @@ export class CADPhysicsEngine {
       body.rotation.y += body.angularVelocity.y * dt;
       body.rotation.z += body.angularVelocity.z * dt;
 
-      // Ground collision check
-      const minY = body.position.y - 10;
+      // Ground collision check — uses each body's real scaled half-height (computed at
+      // init from its actual dimensions/scale), not a hardcoded 10mm, so large or scaled
+      // parts rest on the floor at their true size instead of sinking through it.
+      const minY = body.position.y - body.halfHeightMm;
       if (minY <= this.config.groundY) {
-        body.position.y = this.config.groundY + 10;
+        body.position.y = this.config.groundY + body.halfHeightMm;
         body.velocity.y = -body.velocity.y * body.restitution;
         body.velocity.x *= 1 - body.friction;
         body.velocity.z *= 1 - body.friction;

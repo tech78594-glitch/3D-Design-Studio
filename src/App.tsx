@@ -68,7 +68,7 @@ import { VoiceCommandInterface } from './components/shared/VoiceCommandInterface
 import { EngineeringValidationModal } from './components/shared/EngineeringValidationModal';
 import { ChatMessage, LiveUserCursor } from './types/collaboration';
 import { VoiceCommandMatch } from './utils/voiceCommand';
-import { exportSceneToSTL, exportSceneToOBJ, exportSceneTo3MF } from './utils/cadEngine';
+import { exportSceneToSTL, exportSceneToOBJ, exportSceneTo3MF, sanitizeImportedCADObjects } from './utils/cadEngine';
 import { detectAssemblyClashes } from './utils/clashDetection';
 import { createVersionSnapshot } from './utils/versionManager';
 import {
@@ -423,6 +423,10 @@ export default function App() {
   const [history, setHistory] = useState<SceneHistoryStep[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
 
+  // Bumped to trigger Viewport3D's camera reset from outside it (e.g. the "reset view"
+  // voice command) — see Viewport3D's resetViewSignal prop.
+  const [resetViewSignal, setResetViewSignal] = useState(0);
+
   // Active objects according to section
   const currentObjects = section === 'technology' ? techObjects : buildingObjects;
   const setObjectsForCurrentSection = (updater: (prev: CADObject[]) => CADObject[]) => {
@@ -433,8 +437,24 @@ export default function App() {
     }
   };
 
-  // Record History Step on significant changes
+  // Record History Step on significant changes.
+  //
+  // Call sites invoke this synchronously right after setObjectsForCurrentSection (or
+  // setDeviceConfig/setBuildingConfig) in the same event handler. Because React state
+  // updates aren't applied until the next render, `currentObjects`/`deviceConfig`/
+  // `buildingConfig` read directly here would still be the PRE-update values from this
+  // render's closure — every history snapshot would capture the state one action too
+  // early, making undo/redo consistently off-by-one. So recordHistory just flags that a
+  // snapshot is due; the effect below actually captures it once the triggering state
+  // update has committed and this component has re-rendered with the fresh values.
+  const pendingHistorySnapshotRef = useRef(false);
   const recordHistory = useCallback(() => {
+    pendingHistorySnapshotRef.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (!pendingHistorySnapshotRef.current) return;
+    pendingHistorySnapshotRef.current = false;
     const step: SceneHistoryStep = {
       objects: currentObjects,
       deviceConfig,
@@ -443,7 +463,11 @@ export default function App() {
     };
     setHistory(prev => [...prev.slice(0, historyIndex + 1), step]);
     setHistoryIndex(prev => prev + 1);
-  }, [currentObjects, deviceConfig, buildingConfig, historyIndex]);
+    // Deliberately omits historyIndex from deps — it only changes via this same effect
+    // (or undo/redo, which restore state without setting the pending flag), so the
+    // value closed over at the time this effect fires is already current.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentObjects, deviceConfig, buildingConfig]);
 
   // Hook for Debounced Auto-Save Persistence
   const { autoSaveState, triggerImmediateSave, clearAutoSave } = useAutoSave({
@@ -760,18 +784,27 @@ export default function App() {
     setSnapshots(prev => prev.filter(s => s.id !== id));
   };
 
-  // Import Project JSON
+  // Import Project JSON — imported file content is arbitrary user-supplied data, so it
+  // is validated/repaired via sanitizeImportedCADObjects before ever reaching component
+  // state. Previously a malformed object (missing scale/material/etc.) was set directly
+  // into state and crashed Viewport3D/cadEngine/massCalculator the moment it rendered.
   const handleImportScene = (jsonStr: string) => {
     try {
       const data = JSON.parse(jsonStr);
+      const targetSection: DesignSection = data.section === 'building' ? 'building' : 'technology';
       if (data.section) {
-        setSection(data.section);
+        setSection(targetSection);
       }
       if (Array.isArray(data.objects)) {
-        if (data.section === 'building') {
-          setBuildingObjects(data.objects);
+        const sanitized = sanitizeImportedCADObjects(data.objects, targetSection);
+        const droppedCount = data.objects.length - sanitized.length;
+        if (droppedCount > 0) {
+          console.warn(`Import: dropped ${droppedCount} malformed object(s) that could not be repaired.`);
+        }
+        if (targetSection === 'building') {
+          setBuildingObjects(sanitized);
         } else {
-          setTechObjects(data.objects);
+          setTechObjects(sanitized);
         }
       }
       recordHistory();
@@ -1130,6 +1163,7 @@ export default function App() {
             showExplodedTrails={showExplodedTrails}
             explodedTrailsSettings={explodedTrailsSettings}
             liveCursors={onlineUsers}
+            resetViewSignal={resetViewSignal}
           />
 
           {/* Floating Smart Edge Inspector Dock */}
@@ -1633,6 +1667,15 @@ export default function App() {
               break;
             case 'toggle_grid':
               setGridVisible(prev => !prev);
+              break;
+            case 'undo':
+              handleUndo();
+              break;
+            case 'redo':
+              handleRedo();
+              break;
+            case 'reset_view':
+              setResetViewSignal(prev => prev + 1);
               break;
           }
         }}

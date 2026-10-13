@@ -5,6 +5,7 @@
  */
 
 import { CADObject, CADConstraint, InterferenceResult } from '../types/cad';
+import { getObjectBoundingBox } from './autoAlign';
 
 export interface SolvedConstraintResult {
   updatedObjects: CADObject[];
@@ -159,20 +160,23 @@ export function solveAssemblyConstraints(
 }
 
 /**
- * Get dimensional length along X, Y, or Z axis
+ * Get dimensional length along X, Y, or Z axis — delegates to getObjectBoundingBox
+ * (autoAlign.ts), which is the one place in this app that correctly accounts for
+ * primitive shape, rotation, AND scale. This function used to read dimensions.width/
+ * height/depth directly and ignore obj.scale entirely, so a mated/scaled part's gap
+ * and clash calculations were wrong by exactly its scale factor.
  */
 function getDimensionAlongAxis(obj: CADObject, axis: 'x' | 'y' | 'z'): number {
-  if (axis === 'x') {
-    return obj.dimensions.width || (obj.dimensions.radius ? obj.dimensions.radius * 2 : 10);
-  }
-  if (axis === 'y') {
-    return obj.dimensions.height || (obj.dimensions.radius ? obj.dimensions.radius * 2 : 10);
-  }
-  return obj.dimensions.depth || (obj.dimensions.radius ? obj.dimensions.radius * 2 : 10);
+  const bbox = getObjectBoundingBox(obj);
+  const axisIdx = axis === 'x' ? 0 : axis === 'y' ? 1 : 2;
+  return bbox.size[axisIdx] || 10;
 }
 
 /**
- * Check 3D AABB Bounding Box / Cylinder clearances and volumetric clashes
+ * Check 3D AABB Bounding Box / Cylinder clearances and volumetric clashes.
+ * Uses getObjectBoundingBox (autoAlign.ts) for each object's world-space AABB so scale
+ * (and rotation) are accounted for consistently with the rest of the app, instead of
+ * reading dimensions.width/height/depth directly and silently ignoring obj.scale.
  */
 export function calculateInterferences(objects: CADObject[]): InterferenceResult[] {
   const results: InterferenceResult[] = [];
@@ -184,28 +188,13 @@ export function calculateInterferences(objects: CADObject[]): InterferenceResult
 
       if (!a.visible || !b.visible) continue;
 
-      // Calculate bounding box in world space
-      const halfWa = (a.dimensions.width || 10) / 2;
-      const halfHa = (a.dimensions.height || 10) / 2;
-      const halfDa = (a.dimensions.depth || 10) / 2;
+      const bboxA = getObjectBoundingBox(a);
+      const bboxB = getObjectBoundingBox(b);
 
-      const halfWb = (b.dimensions.width || 10) / 2;
-      const halfHb = (b.dimensions.height || 10) / 2;
-      const halfDb = (b.dimensions.depth || 10) / 2;
-
-      const minAx = a.position[0] - halfWa;
-      const maxAx = a.position[0] + halfWa;
-      const minAy = a.position[1] - halfHa;
-      const maxAy = a.position[1] + halfHa;
-      const minAz = a.position[2] - halfDa;
-      const maxAz = a.position[2] + halfDa;
-
-      const minBx = b.position[0] - halfWb;
-      const maxBx = b.position[0] + halfWb;
-      const minBy = b.position[1] - halfHb;
-      const maxBy = b.position[1] + halfHb;
-      const minBz = b.position[2] - halfDb;
-      const maxBz = b.position[2] + halfDb;
+      const [minAx, minAy, minAz] = bboxA.min;
+      const [maxAx, maxAy, maxAz] = bboxA.max;
+      const [minBx, minBy, minBz] = bboxB.min;
+      const [maxBx, maxBy, maxBz] = bboxB.max;
 
       // Overlap distances along axes
       const overlapX = Math.min(maxAx, maxBx) - Math.max(minAx, minBx);

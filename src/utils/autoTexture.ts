@@ -182,7 +182,21 @@ export async function generateAutoTexture(
     color: baseColor,
     roughness: options.roughness ?? 0.35,
     metalness: options.metalness ?? 0.6,
-    texturePattern: options.presetStyle === 'carbon' ? 'carbon' : options.presetStyle === 'pcb_grid' ? 'pcb_grid' : 'brushed',
+    // Previously this only ever produced 'carbon'/'pcb_grid'/'brushed' — a wood_grain
+    // preset was mislabeled 'brushed', and createCADMaterial (cadEngine.ts) didn't
+    // recognize 'brushed'/'wood_grain'/'concrete_speck' at all, so none of these
+    // actually textured the live 3D mesh. Both are now fixed: correctly label the
+    // pattern here, and cadEngine.ts now renders all of these pattern types.
+    texturePattern:
+      options.presetStyle === 'carbon'
+        ? 'carbon'
+        : options.presetStyle === 'pcb_grid'
+          ? 'pcb_grid'
+          : options.presetStyle === 'wood_grain'
+            ? 'wood_grain'
+            : options.presetStyle === 'marble'
+              ? 'concrete_speck'
+              : 'brushed',
   };
 
   return {

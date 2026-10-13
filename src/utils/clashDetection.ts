@@ -131,8 +131,11 @@ export function checkPairInterference(
     };
   }
 
-  // Check clearance violation tolerance
-  if (minClearance > 0 && minClearance < settings.clearanceToleranceMm) {
+  // Check clearance violation tolerance — reads mergedSettings (which has
+  // DEFAULT_CLASH_SETTINGS applied), not the raw `settings` param, which is a
+  // Partial<> and silently disables clearance detection (comparing against
+  // `undefined`) whenever a caller omits clearanceToleranceMm.
+  if (minClearance > 0 && minClearance < mergedSettings.clearanceToleranceMm) {
     const centerPoint: [number, number, number] = [
       (boxA.center[0] + boxB.center[0]) / 2,
       (boxA.center[1] + boxB.center[1]) / 2,

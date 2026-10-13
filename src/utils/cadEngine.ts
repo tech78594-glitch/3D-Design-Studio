@@ -1,6 +1,109 @@
 import * as THREE from 'three';
 import JSZip from 'jszip';
-import { CADObject, RenderMode, CADMaterial } from '../types/cad';
+import { CADObject, RenderMode, CADMaterial, DesignSection } from '../types/cad';
+import { generateProceduralCanvas } from './autoTexture';
+
+const DEFAULT_IMPORT_MATERIAL: CADMaterial = {
+  id: 'mat_default_import',
+  name: 'Default Material',
+  type: 'anodized_aluminum',
+  color: '#9ca3af',
+  roughness: 0.5,
+  metalness: 0.5,
+};
+
+function isFiniteTriple(v: unknown): v is [number, number, number] {
+  return Array.isArray(v) && v.length === 3 && v.every(n => typeof n === 'number' && Number.isFinite(n));
+}
+
+/**
+ * Validates and repairs a single imported object into a safe CADObject, filling in
+ * sane defaults for any missing/malformed optional-looking-but-load-bearing fields
+ * (scale, rotation, dimensions, material, visible, etc.). Returns null only when the
+ * entry is unsalvageable (not an object, or missing the bare minimum to render/identify
+ * it), so callers can drop just that one bad entry instead of the whole import crashing.
+ *
+ * This exists because imported project JSON is arbitrary user-supplied file content —
+ * without it, a single malformed object (e.g. missing `scale` or `material`) propagates
+ * straight into Viewport3D/cadEngine/massCalculator and crashes the whole app, since
+ * those read fields like `obj.scale[0]` and `obj.material.roughness` unconditionally.
+ */
+export function sanitizeImportedCADObject(raw: unknown, section: DesignSection): CADObject | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+
+  if (typeof o.id !== 'string' || !o.id) return null;
+
+  const dimsRaw = (o.dimensions && typeof o.dimensions === 'object' ? o.dimensions : {}) as Record<string, unknown>;
+  const dimensions = {
+    width: typeof dimsRaw.width === 'number' && Number.isFinite(dimsRaw.width) ? dimsRaw.width : 10,
+    height: typeof dimsRaw.height === 'number' && Number.isFinite(dimsRaw.height) ? dimsRaw.height : 10,
+    depth: typeof dimsRaw.depth === 'number' && Number.isFinite(dimsRaw.depth) ? dimsRaw.depth : 10,
+    radius: typeof dimsRaw.radius === 'number' && Number.isFinite(dimsRaw.radius) ? dimsRaw.radius : undefined,
+    radiusTop: typeof dimsRaw.radiusTop === 'number' && Number.isFinite(dimsRaw.radiusTop) ? dimsRaw.radiusTop : undefined,
+    radiusBottom:
+      typeof dimsRaw.radiusBottom === 'number' && Number.isFinite(dimsRaw.radiusBottom) ? dimsRaw.radiusBottom : undefined,
+    segments: typeof dimsRaw.segments === 'number' && Number.isFinite(dimsRaw.segments) ? dimsRaw.segments : undefined,
+    bevelRadius:
+      typeof dimsRaw.bevelRadius === 'number' && Number.isFinite(dimsRaw.bevelRadius) ? dimsRaw.bevelRadius : undefined,
+  };
+
+  const matRaw = o.material && typeof o.material === 'object' ? (o.material as Record<string, unknown>) : null;
+  const material: CADMaterial = matRaw
+    ? {
+        id: typeof matRaw.id === 'string' ? matRaw.id : `mat_${o.id}`,
+        name: typeof matRaw.name === 'string' ? matRaw.name : 'Imported Material',
+        type: typeof matRaw.type === 'string' ? (matRaw.type as CADMaterial['type']) : 'anodized_aluminum',
+        color: typeof matRaw.color === 'string' ? matRaw.color : '#9ca3af',
+        roughness: typeof matRaw.roughness === 'number' && Number.isFinite(matRaw.roughness) ? matRaw.roughness : 0.5,
+        metalness: typeof matRaw.metalness === 'number' && Number.isFinite(matRaw.metalness) ? matRaw.metalness : 0.5,
+        transmission: typeof matRaw.transmission === 'number' ? matRaw.transmission : undefined,
+        opacity: typeof matRaw.opacity === 'number' ? matRaw.opacity : undefined,
+        transparent: typeof matRaw.transparent === 'boolean' ? matRaw.transparent : undefined,
+        emissive: typeof matRaw.emissive === 'string' ? matRaw.emissive : undefined,
+        emissiveIntensity: typeof matRaw.emissiveIntensity === 'number' ? matRaw.emissiveIntensity : undefined,
+        clearcoat: typeof matRaw.clearcoat === 'number' ? matRaw.clearcoat : undefined,
+        wireframe: typeof matRaw.wireframe === 'boolean' ? matRaw.wireframe : undefined,
+        texturePattern: typeof matRaw.texturePattern === 'string' ? (matRaw.texturePattern as CADMaterial['texturePattern']) : undefined,
+      }
+    : { ...DEFAULT_IMPORT_MATERIAL, id: `mat_${o.id}` };
+
+  return {
+    id: o.id,
+    name: typeof o.name === 'string' && o.name ? o.name : 'Imported Part',
+    category: typeof o.category === 'string' ? (o.category as CADObject['category']) : 'custom',
+    section: typeof o.section === 'string' ? (o.section as DesignSection) : section,
+    primitive: typeof o.primitive === 'string' ? (o.primitive as CADObject['primitive']) : 'box',
+    position: isFiniteTriple(o.position) ? (o.position as [number, number, number]) : [0, 0, 0],
+    rotation: isFiniteTriple(o.rotation) ? (o.rotation as [number, number, number]) : [0, 0, 0],
+    scale: isFiniteTriple(o.scale) ? (o.scale as [number, number, number]) : [1, 1, 1],
+    dimensions,
+    material,
+    visible: typeof o.visible === 'boolean' ? o.visible : true,
+    locked: typeof o.locked === 'boolean' ? o.locked : false,
+    parentId: typeof o.parentId === 'string' ? o.parentId : undefined,
+    childrenIds: Array.isArray(o.childrenIds) ? (o.childrenIds as string[]) : undefined,
+    explodeDirection: isFiniteTriple(o.explodeDirection) ? (o.explodeDirection as [number, number, number]) : undefined,
+    explodeDistance: typeof o.explodeDistance === 'number' ? o.explodeDistance : undefined,
+    electricalProps: o.electricalProps && typeof o.electricalProps === 'object' ? (o.electricalProps as CADObject['electricalProps']) : undefined,
+    layerId: typeof o.layerId === 'string' ? o.layerId : undefined,
+    tags: Array.isArray(o.tags) ? (o.tags as string[]) : undefined,
+  } as CADObject;
+}
+
+/**
+ * Sanitizes a whole imported objects array, dropping only the entries that are
+ * unsalvageable rather than failing the entire import.
+ */
+export function sanitizeImportedCADObjects(raw: unknown, section: DesignSection): CADObject[] {
+  if (!Array.isArray(raw)) return [];
+  const result: CADObject[] = [];
+  for (const entry of raw) {
+    const sanitized = sanitizeImportedCADObject(entry, section);
+    if (sanitized) result.push(sanitized);
+  }
+  return result;
+}
 
 // Cache procedural textures
 let pcbTextureCache: THREE.CanvasTexture | null = null;
@@ -122,6 +225,53 @@ export function getCarbonTexture(): THREE.CanvasTexture {
   texture.wrapT = THREE.RepeatWrapping;
   texture.repeat.set(8, 8);
   carbonTextureCache = texture;
+  return texture;
+}
+
+// Brushed metal / wood grain / concrete-speck textures reuse the same procedural
+// generator the Auto-Texture Studio preview uses (generateProceduralCanvas in
+// autoTexture.ts), cached once like the other pattern textures above. Previously
+// createCADMaterial only recognized 'pcb_grid'/'carbon' in mat.texturePattern — applying
+// a brushed_metal/wood_grain/anodized/cyber_hex auto-texture set `texturePattern` to
+// 'brushed' or 'wood_grain' (see generateAutoTexture in autoTexture.ts) but nothing ever
+// read those values, so the part rendered completely flat/untextured in the live 3D
+// scene despite the Auto-Texture Studio preview showing the real generated image.
+let brushedMetalTextureCache: THREE.CanvasTexture | null = null;
+let woodGrainTextureCache: THREE.CanvasTexture | null = null;
+let concreteSpeckTextureCache: THREE.CanvasTexture | null = null;
+
+export function getBrushedMetalTexture(): THREE.CanvasTexture {
+  if (brushedMetalTextureCache) return brushedMetalTextureCache;
+  const canvas = generateProceduralCanvas('brushed_metal', '#9ca3af', 512);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(2, 2);
+  brushedMetalTextureCache = texture;
+  return texture;
+}
+
+export function getWoodGrainTexture(): THREE.CanvasTexture {
+  if (woodGrainTextureCache) return woodGrainTextureCache;
+  const canvas = generateProceduralCanvas('wood_grain', '#92400e', 512);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(2, 2);
+  woodGrainTextureCache = texture;
+  return texture;
+}
+
+export function getConcreteSpeckTexture(): THREE.CanvasTexture {
+  if (concreteSpeckTextureCache) return concreteSpeckTextureCache;
+  // No dedicated "concrete" preset in generateProceduralCanvas — passing 'marble' hits
+  // its default branch (soft RGB noise speckle), a reasonable stand-in for concrete.
+  const canvas = generateProceduralCanvas('marble', '#9ca3af', 512);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(3, 3);
+  concreteSpeckTextureCache = texture;
   return texture;
 }
 
@@ -393,6 +543,12 @@ export function createCADMaterial(
     standardMat.roughnessMap = getPCBTexture();
   } else if (mat.texturePattern === 'carbon') {
     standardMat.map = getCarbonTexture();
+  } else if (mat.texturePattern === 'brushed') {
+    standardMat.map = getBrushedMetalTexture();
+  } else if (mat.texturePattern === 'wood_grain') {
+    standardMat.map = getWoodGrainTexture();
+  } else if (mat.texturePattern === 'concrete_speck') {
+    standardMat.map = getConcreteSpeckTexture();
   }
 
   return standardMat;

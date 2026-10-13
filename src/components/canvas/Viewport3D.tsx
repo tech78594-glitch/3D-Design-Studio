@@ -52,6 +52,36 @@ import {
 // the whole renderer/scene) instead of being recomputed each time.
 let cachedEnvTexture: THREE.Texture | null = null;
 
+// Recursively disposes the geometry and material(s) of every Mesh/Line found under
+// `root`, then removes `root` from its parent. Several cleanup loops below used to just
+// call `group.remove(child)` without disposing anything — fine for lights/empty Groups,
+// but the exploded-trails, edge-selection, measurement-caliper, and comment-pin groups
+// all contain real Meshes/Lines with their own geometry+material, created fresh on every
+// re-render of their effect. Without disposal, toggling any of those features repeatedly
+// leaked GPU buffers for every geometry/material ever created, never freed for the
+// lifetime of the page.
+function disposeObject3D(root: THREE.Object3D) {
+  root.traverse(child => {
+    if (child instanceof THREE.Mesh || child instanceof THREE.Line) {
+      child.geometry?.dispose();
+      const mat = child.material;
+      if (Array.isArray(mat)) {
+        mat.forEach(m => m.dispose());
+      } else {
+        mat?.dispose();
+      }
+    }
+  });
+}
+
+function clearGroup(group: THREE.Group) {
+  while (group.children.length > 0) {
+    const child = group.children[0];
+    group.remove(child);
+    disposeObject3D(child);
+  }
+}
+
 interface Viewport3DProps {
   section: DesignSection;
   objects: CADObject[];
@@ -101,6 +131,10 @@ interface Viewport3DProps {
   showExplodedTrails?: boolean;
   explodedTrailsSettings?: ExplodedTrailsSettings;
   liveCursors?: LiveUserCursor[];
+  // Bump this (e.g. ++counter) from a parent to reset the camera to its default iso
+  // view — used by the "reset view" voice command, which has no other way to reach
+  // the camera reset logic that lives inside this component.
+  resetViewSignal?: number;
 }
 
 export const Viewport3D: React.FC<Viewport3DProps> = ({
@@ -131,6 +165,7 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
   showExplodedTrails = true,
   explodedTrailsSettings = DEFAULT_EXPLODED_TRAILS_SETTINGS,
   liveCursors = [],
+  resetViewSignal,
 }) => {
   // Real-time dynamic mass properties calculation
   const realTimeMassProps = useMemo(() => {
@@ -177,6 +212,15 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
 
   // Clock for smooth animations and holographic float
   const clockRef = useRef(new THREE.Clock());
+
+  // Latest-value refs read inside the render loop (animate()) below. The render loop is
+  // defined once inside the scene-init effect and must NOT force that effect to re-run on
+  // every object edit (that would tear down and rebuild the whole renderer/camera/scene on
+  // every slider drag, snapping the camera zoom back to its section default each time) — so
+  // `objects` and `calculateObjectDisplacement` are deliberately kept OUT of that effect's
+  // dependency array, and the render loop reads these refs instead of the closed-over props.
+  const objectsRef = useRef(objects);
+  const calculateObjectDisplacementRef = useRef<typeof calculateObjectDisplacement | null>(null);
 
   // Stark / Exploded Mode Displacement Calculator
   const calculateObjectDisplacement = useCallback(
@@ -281,6 +325,14 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       objects.length,
     ]
   );
+
+  // Keep the render-loop refs current every render without making the scene-init effect
+  // below depend on `objects`/`calculateObjectDisplacement` directly (see comment on the
+  // refs' declaration above).
+  useEffect(() => {
+    objectsRef.current = objects;
+    calculateObjectDisplacementRef.current = calculateObjectDisplacement;
+  }, [objects, calculateObjectDisplacement]);
 
   // Initialize Three.js Scene
   useEffect(() => {
@@ -418,17 +470,23 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
 
       const timeSec = clockRef.current.getElapsedTime();
 
-      // Dynamic update for harmonic levitation in Stark Mode
+      // Dynamic update for harmonic levitation in Stark Mode — reads the latest objects/
+      // displacement-calculator via refs (not the closed-over props) since this render
+      // loop is created once by the scene-init effect and deliberately never torn down
+      // just because `objects` got a new array reference from an unrelated edit.
       if (deviceConfig.starkModeEnabled || deviceConfig.starkLevitationActive) {
         const meshMap = meshMapRef.current;
-        objects.forEach((obj, idx) => {
-          const mesh = meshMap.get(obj.id);
-          if (mesh && mesh.visible) {
-            const tr = calculateObjectDisplacement(obj, idx, timeSec);
-            mesh.position.set(tr.position[0], tr.position[1], tr.position[2]);
-            mesh.rotation.set(tr.rotation[0], tr.rotation[1], tr.rotation[2]);
-          }
-        });
+        const displaceFn = calculateObjectDisplacementRef.current;
+        if (displaceFn) {
+          objectsRef.current.forEach((obj, idx) => {
+            const mesh = meshMap.get(obj.id);
+            if (mesh && mesh.visible) {
+              const tr = displaceFn(obj, idx, timeSec);
+              mesh.position.set(tr.position[0], tr.position[1], tr.position[2]);
+              mesh.rotation.set(tr.rotation[0], tr.rotation[1], tr.rotation[2]);
+            }
+          });
+        }
       }
 
       // Rotate comment pin beacons gently
@@ -467,7 +525,12 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
         rendererRef.current.dispose();
       }
     };
-  }, [calculateObjectDisplacement, buildingConfig.viewMode2D, deviceConfig.starkLevitationActive, deviceConfig.starkModeEnabled, objects, themeMode]);
+    // Deliberately excludes `objects`, `calculateObjectDisplacement`, and `themeMode`:
+    // the render loop above reads the first two from refs kept current by the sync
+    // effect, and background-color changes from `themeMode` are handled by the
+    // dedicated "Update Theme Mode Background" effect below — so none of the three
+    // should force this expensive full renderer/scene teardown-and-rebuild to run.
+  }, [buildingConfig.viewMode2D, deviceConfig.starkLevitationActive, deviceConfig.starkModeEnabled]);
 
   // Update Theme Mode Background
   useEffect(() => {
@@ -712,39 +775,65 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
 
       const shouldBeVisible = obj.visible && isVisibleByFloor;
 
+      // Geometry only depends on primitive+dimensions; material only depends on the
+      // material object, renderMode, thermal-sim state, heat wattage, slice plane, and
+      // PBR channel. This effect re-runs on EVERY object edit (position drag, rename,
+      // etc.) since `objects` gets a new array reference each time — so without this
+      // per-field cache check, every single mesh in the scene had its geometry AND
+      // material disposed and rebuilt on every keystroke/slider-drag, regardless of
+      // whether that specific mesh's inputs actually changed (O(n) GPU churn per edit).
+      const matChannel = pbrSettings?.channel || 'lit';
+      const heatWattage = obj.electricalProps?.heatWattage;
+      const slicePlane = slicePlaneRef.current;
+
       if (!mesh) {
         const geom = createCADGeometry(obj);
-        const mat = createCADMaterial(
-          obj.material,
-          renderMode,
-          deviceConfig.thermalSimActive,
-          obj.electricalProps?.heatWattage,
-          slicePlaneRef.current,
-          pbrSettings?.channel || 'lit'
-        );
+        const mat = createCADMaterial(obj.material, renderMode, deviceConfig.thermalSimActive, heatWattage, slicePlane, matChannel);
         mesh = new THREE.Mesh(geom, mat);
         mesh.name = obj.id;
         mesh.castShadow = true;
         mesh.receiveShadow = true;
+        mesh.userData.geomSourceDims = obj.dimensions;
+        mesh.userData.geomSourcePrimitive = obj.primitive;
+        mesh.userData.matSourceMaterial = obj.material;
+        mesh.userData.matSourceRenderMode = renderMode;
+        mesh.userData.matSourceThermal = deviceConfig.thermalSimActive;
+        mesh.userData.matSourceHeat = heatWattage;
+        mesh.userData.matSourceSlicePlane = slicePlane;
+        mesh.userData.matSourceChannel = matChannel;
         scene.add(mesh);
         meshMap.set(obj.id, mesh);
       } else {
-        mesh.geometry.dispose();
-        mesh.geometry = createCADGeometry(obj);
-
-        if (Array.isArray(mesh.material)) {
-          mesh.material.forEach(m => m.dispose());
-        } else {
-          mesh.material.dispose();
+        const geometryChanged =
+          mesh.userData.geomSourceDims !== obj.dimensions || mesh.userData.geomSourcePrimitive !== obj.primitive;
+        if (geometryChanged) {
+          mesh.geometry.dispose();
+          mesh.geometry = createCADGeometry(obj);
+          mesh.userData.geomSourceDims = obj.dimensions;
+          mesh.userData.geomSourcePrimitive = obj.primitive;
         }
-        mesh.material = createCADMaterial(
-          obj.material,
-          renderMode,
-          deviceConfig.thermalSimActive,
-          obj.electricalProps?.heatWattage,
-          slicePlaneRef.current,
-          pbrSettings?.channel || 'lit'
-        );
+
+        const materialChanged =
+          mesh.userData.matSourceMaterial !== obj.material ||
+          mesh.userData.matSourceRenderMode !== renderMode ||
+          mesh.userData.matSourceThermal !== deviceConfig.thermalSimActive ||
+          mesh.userData.matSourceHeat !== heatWattage ||
+          mesh.userData.matSourceSlicePlane !== slicePlane ||
+          mesh.userData.matSourceChannel !== matChannel;
+        if (materialChanged) {
+          if (Array.isArray(mesh.material)) {
+            mesh.material.forEach(m => m.dispose());
+          } else {
+            mesh.material.dispose();
+          }
+          mesh.material = createCADMaterial(obj.material, renderMode, deviceConfig.thermalSimActive, heatWattage, slicePlane, matChannel);
+          mesh.userData.matSourceMaterial = obj.material;
+          mesh.userData.matSourceRenderMode = renderMode;
+          mesh.userData.matSourceThermal = deviceConfig.thermalSimActive;
+          mesh.userData.matSourceHeat = heatWattage;
+          mesh.userData.matSourceSlicePlane = slicePlane;
+          mesh.userData.matSourceChannel = matChannel;
+        }
       }
 
       mesh.visible = shouldBeVisible;
@@ -845,10 +934,7 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     const group = explodedTrailsGroupRef.current;
     if (!group) return;
 
-    while (group.children.length > 0) {
-      const child = group.children[0];
-      group.remove(child);
-    }
+    clearGroup(group);
 
     if (section === 'technology' && showExplodedTrails) {
       const trails = generateExplodedTrails(objects, deviceConfig, explodedTrailsSettings);
@@ -875,10 +961,7 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     const group = edgeVisualsGroupRef.current;
     if (!group) return;
 
-    while (group.children.length > 0) {
-      const child = group.children[0];
-      group.remove(child);
-    }
+    clearGroup(group);
 
     if (isEdgeSelectionMode) {
       const visuals = createEdgeSelectionVisuals(selectedEdges, hoveredEdge);
@@ -894,10 +977,7 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     const group = measurementsGroupRef.current;
     if (!group) return;
 
-    while (group.children.length > 0) {
-      const child = group.children[0];
-      group.remove(child);
-    }
+    clearGroup(group);
 
     const sphereGeom = new THREE.SphereGeometry(section === 'technology' ? 1.5 : 0.2, 16, 16);
 
@@ -945,10 +1025,7 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     const group = commentsGroupRef.current;
     if (!group) return;
 
-    while (group.children.length > 0) {
-      const child = group.children[0];
-      group.remove(child);
-    }
+    clearGroup(group);
 
     comments.forEach(pin => {
       const pinContainer = new THREE.Group();
@@ -1152,19 +1229,24 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
               const dist = next[0].distanceTo(next[1]);
               setMeasureDistance(dist);
               if (onAddMeasurement) {
-                const hitObjId = intersects[0].object.name;
+                // Match the real CADMeasurement shape (mode/distanceMm/deltaX/deltaY/deltaZ/
+                // createdAt) — this previously used fields (type/distance/unit/targetObjectId/
+                // timestamp) that don't exist on CADMeasurement, so MeasuringToolPanel's
+                // unconditional `m.distanceMm.toFixed(2)` crashed as soon as a measurement
+                // was added by clicking two points in the viewport.
                 onAddMeasurement({
                   id: `meas_${Date.now()}`,
                   name: `Measurement (${dist.toFixed(2)} ${section === 'technology' ? 'mm' : 'm'})`,
-                  type: 'point_to_point',
+                  mode: 'point_to_point',
                   pointA: [next[0].x, next[0].y, next[0].z],
                   pointB: [next[1].x, next[1].y, next[1].z],
-                  distance: dist,
-                  unit: section === 'technology' ? 'mm' : 'm',
+                  distanceMm: parseFloat(dist.toFixed(2)),
+                  deltaX: Math.abs(next[1].x - next[0].x),
+                  deltaY: Math.abs(next[1].y - next[0].y),
+                  deltaZ: Math.abs(next[1].z - next[0].z),
                   color: '#06b6d4',
                   visible: true,
-                  targetObjectId: hitObjId,
-                  timestamp: Date.now(),
+                  createdAt: new Date().toLocaleTimeString(),
                 });
               }
               return next;
@@ -1322,6 +1404,20 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     };
     setActiveCamView('iso');
   };
+
+  // Lets a parent (e.g. the "reset view" voice command) trigger the same camera reset
+  // as the toolbar button, by bumping resetViewSignal — there's no other way to reach
+  // this component's internal camera-reset logic from outside. Skips the very first
+  // render so mounting with a default signal value doesn't reset an already-default
+  // camera.
+  const resetViewSignalRef = useRef(resetViewSignal);
+  useEffect(() => {
+    if (resetViewSignal === undefined) return;
+    if (resetViewSignalRef.current === resetViewSignal) return;
+    resetViewSignalRef.current = resetViewSignal;
+    resetCamera();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetViewSignal]);
 
   const isLight = themeMode === 'light';
   const selectedObject = objects.find(o => o.id === selectedObjectId);

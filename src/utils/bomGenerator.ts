@@ -1,5 +1,31 @@
 import { CADObject, BOMRowItem, BOMReportSummary } from '../types/cad';
 
+// generatePrintableBOMHTML interpolates part names, material names, SKUs, process names,
+// and assembly/author metadata directly into an HTML document that gets opened/printed.
+// All of those are user-editable strings (rename a part, set the author field, etc.), so
+// without escaping, a part renamed to contain markup (e.g. `<img onerror=...>` or a
+// `<script>` tag) would execute when the generated BOM report is opened — a stored-XSS
+// vector. The CSV exporter in this same file already escapes its own special character
+// (quotes); this does the equivalent for HTML.
+function escapeHtml(value: unknown): string {
+  return String(value ?? '').replace(/[&<>"']/g, ch => {
+    switch (ch) {
+      case '&':
+        return '&amp;';
+      case '<':
+        return '&lt;';
+      case '>':
+        return '&gt;';
+      case '"':
+        return '&quot;';
+      case "'":
+        return '&#39;';
+      default:
+        return ch;
+    }
+  });
+}
+
 // Densities in g/cm3 for various CAD material types
 const MATERIAL_DENSITY_MAP: Record<string, number> = {
   anodized_aluminum: 2.70,
@@ -205,7 +231,7 @@ export function generatePrintableBOMHTML(bom: BOMReportSummary): string {
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>${bom.assemblyName} - Bill of Materials (BOM)</title>
+  <title>${escapeHtml(bom.assemblyName)} - Bill of Materials (BOM)</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -315,12 +341,12 @@ export function generatePrintableBOMHTML(bom: BOMReportSummary): string {
 <body>
   <div class="header">
     <div>
-      <h1 class="title">${bom.assemblyName}</h1>
+      <h1 class="title">${escapeHtml(bom.assemblyName)}</h1>
       <p class="subtitle">Official Engineering Bill of Materials & Procurement Datasheet</p>
     </div>
     <div class="meta-box">
-      <div><strong>Date:</strong> ${bom.generatedDate}</div>
-      <div><strong>Author:</strong> ${bom.author}</div>
+      <div><strong>Date:</strong> ${escapeHtml(bom.generatedDate)}</div>
+      <div><strong>Author:</strong> ${escapeHtml(bom.author)}</div>
       <div><strong>Classification:</strong> Engineering Standard Level 3</div>
     </div>
   </div>
@@ -336,7 +362,7 @@ export function generatePrintableBOMHTML(bom: BOMReportSummary): string {
     </div>
     <div class="kpi-card">
       <div class="kpi-label">Estimated BOM Cost</div>
-      <div class="kpi-val">$${bom.totalCostUsd.toLocaleString()} ${bom.currency}</div>
+      <div class="kpi-val">$${bom.totalCostUsd.toLocaleString()} ${escapeHtml(bom.currency)}</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-label">Subsystems Count</div>
@@ -366,17 +392,17 @@ export function generatePrintableBOMHTML(bom: BOMReportSummary): string {
         .map(
           item => `
         <tr>
-          <td><strong>${item.itemNumber}</strong></td>
-          <td><strong>${item.name}</strong></td>
-          <td>${item.category}</td>
-          <td>${item.materialName}</td>
-          <td class="sku">${item.supplierSKU}</td>
+          <td><strong>${escapeHtml(item.itemNumber)}</strong></td>
+          <td><strong>${escapeHtml(item.name)}</strong></td>
+          <td>${escapeHtml(item.category)}</td>
+          <td>${escapeHtml(item.materialName)}</td>
+          <td class="sku">${escapeHtml(item.supplierSKU)}</td>
           <td>${item.quantity}</td>
-          <td>${item.dimensionsFormatted}</td>
+          <td>${escapeHtml(item.dimensionsFormatted)}</td>
           <td>${item.unitMassGrams}g</td>
           <td>$${item.unitCostUsd.toFixed(2)}</td>
           <td><strong>$${item.totalCostUsd.toFixed(2)}</strong></td>
-          <td>${item.manufacturingProcess}</td>
+          <td>${escapeHtml(item.manufacturingProcess)}</td>
           <td>${item.leadTimeWeeks}w</td>
         </tr>
       `
@@ -388,7 +414,7 @@ export function generatePrintableBOMHTML(bom: BOMReportSummary): string {
   <div class="approval-section">
     <div>
       <div class="sign-line"></div>
-      <div><strong>Prepared By:</strong> ${bom.author}</div>
+      <div><strong>Prepared By:</strong> ${escapeHtml(bom.author)}</div>
       <div style="color: #64748b; font-size: 10px;">Mechanical CAD Engineer</div>
     </div>
     <div>

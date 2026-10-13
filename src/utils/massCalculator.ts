@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { CADObject, CADMassProperties, PartMassItem, MaterialDensityPreset, InertiaTensor } from '../types/cad';
 import { createCADGeometry } from './cadEngine';
+import { getObjectBoundingBox } from './autoAlign';
 
 /**
  * Standard Engineering Materials Physical Database
@@ -418,10 +419,12 @@ export function calculateAssemblyMassProperties(
 
     const worldPartCoG = new THREE.Vector3(...localCoGMm).applyMatrix4(matrix);
 
-    // Update global assembly bounds
-    const halfDim = new THREE.Vector3(15, 15, 15).multiply(objScale);
-    minBounds.min(objPos.clone().sub(halfDim));
-    maxBounds.max(objPos.clone().add(halfDim));
+    // Update global assembly bounds using the part's real (rotation+scale-aware) AABB
+    // instead of a hardcoded 15mm half-extent, which made boundingBoxMm grossly wrong
+    // for anything larger than ~30mm — e.g. every Building-section wall/slab.
+    const partBbox = getObjectBoundingBox(obj);
+    minBounds.min(new THREE.Vector3(...partBbox.min));
+    maxBounds.max(new THREE.Vector3(...partBbox.max));
 
     totalMassGrams += massGrams;
     totalVolumeCm3 += volumeCm3;
