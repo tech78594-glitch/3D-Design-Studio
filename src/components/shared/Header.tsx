@@ -287,16 +287,22 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header
       id="app_header"
-      // Deliberately no overflow-x-auto here: the right-hand controls (Theme Switcher,
-      // Undo/Redo, Export, etc.) are `shrink-0`, and the middle feature-studio row
-      // already scrolls internally via its own `flex-1 min-w-0 overflow-x-auto`. If the
-      // *outer* header also scrolled as one unit, a narrow window would push the right
-      // section out of the visible area entirely (reachable only by scrolling the whole
-      // ribbon sideways, with the 3D viewport filling the space underneath it instead) —
-      // which is what made the Theme toggle look covered by the design canvas. Keeping
-      // the overflow scoped to the middle row guarantees the right-hand controls are
-      // always visible.
-      className={`h-14 border-b px-3 sm:px-4 flex items-center justify-between gap-2 select-none z-20 shrink-0 transition-colors backdrop-blur-xl ${
+      // The right-hand controls (Theme Switcher, Undo/Redo, Export, etc.) are `shrink-0`
+      // and placed last, so flexbox always reserves their full natural width first.
+      // EVERYTHING ELSE — brand/logo, section switcher, search, the ribbon-collapse
+      // toggle, and the feature-studio button row — lives together in the single
+      // `flex-1 min-w-0 overflow-x-auto` wrapper just below, so it all scrolls as one
+      // unit to absorb whatever width is left over. That used to be split into two
+      // independently-sized `shrink-0` groups (brand/switcher vs. the button row), which
+      // meant the brand+switcher's own fixed width was reserved *before* the button row
+      // got anything — on narrower windows that left the button row at literally 0px
+      // (every feature-studio button unreachable), and at some widths even pushed the
+      // right-hand controls (e.g. Export) past the edge of the window, since neither of
+      // those `shrink-0` groups could ever give up space. Merging them into one scrollable
+      // zone means the right-hand controls are always fully visible (they're shrink-0 and
+      // last) and everything scrollable just shrinks/scrolls together instead of some of
+      // it vanishing outright.
+      className={`h-14 border-b px-3 sm:px-4 flex items-center gap-2 select-none z-20 shrink-0 transition-colors backdrop-blur-xl ${
         isLight
           ? 'bg-slate-100/80 border-slate-300 text-slate-900 shadow-sm'
           : isBlueprint
@@ -304,6 +310,10 @@ export const Header: React.FC<HeaderProps> = ({
           : 'bg-zinc-900/80 border-zinc-800 text-zinc-100'
       }`}
     >
+      {/* Scrollable zone: brand/logo, section switcher, search, ribbon-collapse toggle,
+          and the feature-studio button row all live in here so they share whatever width
+          remains after the pinned Right section (below) takes its share. */}
+      <div className="flex-1 min-w-0 flex items-center gap-2.5 sm:gap-3.5 overflow-x-auto scrollbar-none">
       {/* Left: Brand Identity, Section Switcher & Quick Command Search */}
       <div className="flex items-center gap-2.5 sm:gap-3.5 shrink-0">
         <button
@@ -437,9 +447,12 @@ export const Header: React.FC<HeaderProps> = ({
         </QuickTooltip>
       )}
 
-      {/* Middle: Studio Viewport Controls & Feature Studios */}
+      {/* Middle: Studio Viewport Controls & Feature Studios. No longer its own flex-1/
+          overflow-x-auto scroller — it's now just a row of buttons inside the shared
+          scrollable zone (see the wrapper this whole header body lives in), so its
+          sizing follows that wrapper's scroll instead of fighting it for space. */}
       {isToolbarExpanded ? (
-      <div className="flex-1 min-w-0 flex items-center gap-1 sm:gap-1.5 overflow-x-auto py-1 scrollbar-none">
+      <div className="flex items-center gap-1 sm:gap-1.5 py-1 shrink-0">
         {/* Render Shader Mode Selector */}
         <div className={`hidden 2xl:flex items-center rounded-lg p-0.5 border text-xs ${isLight ? 'bg-slate-200 border-slate-300' : 'bg-zinc-950 border-zinc-800'}`}>
           {(
@@ -880,7 +893,7 @@ export const Header: React.FC<HeaderProps> = ({
         // intentionally hidden (not broken/missing), with a one-click way back. Keeps the
         // ribbon slim without ever hiding the Theme Switcher / Undo-Redo / Export controls
         // in the Right section, which stay visible in both states.
-        <div className="flex-1 min-w-0 flex items-center">
+        <div className="flex items-center shrink-0">
           <button
             onClick={onToggleToolbarExpanded}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium transition-all ${
@@ -894,8 +907,10 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         </div>
       )}
+      </div>
 
-      {/* Right: Auto-Save Status, Theme Switcher, Undo/Redo & Model Export / Import Menu */}
+      {/* Right: Auto-Save Status, Theme Switcher, Undo/Redo & Model Export / Import Menu —
+          always `shrink-0` and last, so it never loses space to the scrollable zone above. */}
       <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
         {/* Auto-Save Status Badge & Dropdown */}
         <div className="relative">

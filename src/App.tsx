@@ -859,9 +859,13 @@ export default function App() {
     recordHistory();
   };
 
-  // Clashes computation for header indicator
+  // Clashes computation for header indicator. Uses the same DEFAULT_CLASH_SETTINGS
+  // (0.5mm clearance tolerance) that ClashDetectionModal starts with — previously this
+  // used a different hardcoded 0.2mm tolerance, so the header's "Clashes" badge count
+  // and the modal's own totals could disagree (a tighter tolerance here flags fewer
+  // borderline "clearance proximity" items than the modal's default 0.5mm does).
   const assemblyClashes = useMemo(() => {
-    return detectAssemblyClashes(currentObjects, { clearanceToleranceMm: 0.2 });
+    return detectAssemblyClashes(currentObjects);
   }, [currentObjects]);
 
   const selectedObject = currentObjects.find(o => o.id === selectedObjectId) || null;

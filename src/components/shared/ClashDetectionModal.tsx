@@ -68,14 +68,31 @@ export const ClashDetectionModal: React.FC<ClashDetectionModalProps> = ({
   };
 
   const handleResolveAll = () => {
+    // Only hard clashes and soft interferences are ever nudged apart — clearance-touch
+    // "proximity" items are deliberately left alone (they're not actual overlaps, just a
+    // closeness warning, and nudging them could just create a new clash elsewhere). The
+    // feedback toast used to report `activeClashes.length` (every active item, proximity
+    // included), which overstated how many clashes were actually resolved whenever any
+    // proximity items were present. It now reports the real number of items this pass
+    // actually acted on.
+    const resolvable = activeClashes.filter(
+      c => c.severity === 'critical_clash' || c.severity === 'soft_interference'
+    );
+
+    if (resolvable.length === 0) {
+      setResolveFeedback('No hard clashes or soft interferences left to auto-resolve.');
+      setTimeout(() => setResolveFeedback(null), 3000);
+      return;
+    }
+
     let currentObjects = [...objects];
-    for (const clash of activeClashes) {
-      if (clash.severity === 'critical_clash' || clash.severity === 'soft_interference') {
-        currentObjects = autoResolveClash(currentObjects, clash, settings.clearanceToleranceMm);
-      }
+    for (const clash of resolvable) {
+      currentObjects = autoResolveClash(currentObjects, clash, settings.clearanceToleranceMm);
     }
     onUpdateObjects(currentObjects);
-    setResolveFeedback(`Auto-resolved ${activeClashes.length} assembly clashes!`);
+    setResolveFeedback(
+      `Auto-resolved ${resolvable.length} assembly clash${resolvable.length === 1 ? '' : 'es'}!`
+    );
     setTimeout(() => setResolveFeedback(null), 3000);
   };
 

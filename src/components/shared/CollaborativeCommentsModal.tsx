@@ -417,29 +417,34 @@ export const CollaborativeCommentsModal: React.FC<CollaborativeCommentsModalProp
             ) : selectedComment ? (
               /* Selected Thread View */
               <div className="flex-1 flex flex-col overflow-hidden">
-                {/* Thread Top Bar */}
-                <div className="p-5 border-b border-zinc-800 bg-zinc-950/40 flex items-start justify-between">
-                  <div className="space-y-1">
+                {/* Thread Top Bar. `flex-wrap` lets the metadata block and the action
+                    buttons drop to their own line instead of overlapping/clipping when
+                    the panel is narrow — a long target part name plus the status dropdown
+                    previously had no room to coexist and visually crowded together. */}
+                <div className="p-5 border-b border-zinc-800 bg-zinc-950/40 flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+                  <div className="space-y-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span
-                        className="w-6 h-6 rounded-full text-xs font-bold text-zinc-950 flex items-center justify-center font-mono"
+                        className="w-6 h-6 rounded-full text-xs font-bold text-zinc-950 flex items-center justify-center font-mono shrink-0"
                         style={{ backgroundColor: selectedComment.avatarColor }}
                       >
                         {selectedComment.authorInitials}
                       </span>
                       <h3 className="text-base font-bold text-zinc-100">{selectedComment.title}</h3>
                     </div>
-                    <div className="text-xs text-zinc-400 flex items-center gap-3">
+                    <div className="text-xs text-zinc-400 flex items-center gap-2 flex-wrap">
                       <span>By <strong>{selectedComment.author}</strong></span>
                       <span>•</span>
-                      <span>Target: <strong className="text-indigo-400">{selectedComment.targetPartName || '3D Space'}</strong></span>
+                      <span className="min-w-0">
+                        Target: <strong className="text-indigo-400 break-words">{selectedComment.targetPartName || '3D Space'}</strong>
+                      </span>
                       <span>•</span>
                       <span>{selectedComment.createdAt}</span>
                     </div>
                   </div>
 
                   {/* Status buttons & Jump to part */}
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 shrink-0">
                     {selectedComment.targetPartId && (
                       <button
                         onClick={() => {
