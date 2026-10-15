@@ -56,6 +56,9 @@ import {
   Sliders,
   Clock,
   ShieldCheck,
+  ChevronLeft,
+  ChevronRight,
+  Wrench,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { QuickTooltip } from './QuickTooltip';
@@ -128,6 +131,13 @@ interface HeaderProps {
   onOpenVoiceCommand?: () => void;
   autoSaveIntervalPref?: AutoSaveIntervalOption;
   onChangeAutoSaveIntervalPref?: (pref: AutoSaveIntervalOption) => void;
+  // Collapses the middle row of feature-studio shortcut buttons (Versioning, BOM,
+  // Measure, Clash Detection, etc.) down to a small "N Tools" pill. Every one of those
+  // actions is also reachable from the Quick Commands palette (⌘K), so collapsing this
+  // row never removes functionality — it only reclaims ribbon width/height. Defaults to
+  // expanded (current behavior) when not provided.
+  isToolbarExpanded?: boolean;
+  onToggleToolbarExpanded?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -197,6 +207,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenVoiceCommand,
   autoSaveIntervalPref = '30s',
   onChangeAutoSaveIntervalPref,
+  isToolbarExpanded = true,
+  onToggleToolbarExpanded,
 }) => {
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
@@ -275,7 +287,16 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header
       id="app_header"
-      className={`h-14 border-b px-3 sm:px-4 flex items-center justify-between gap-2 select-none z-20 shrink-0 transition-colors overflow-x-auto scrollbar-none backdrop-blur-xl ${
+      // Deliberately no overflow-x-auto here: the right-hand controls (Theme Switcher,
+      // Undo/Redo, Export, etc.) are `shrink-0`, and the middle feature-studio row
+      // already scrolls internally via its own `flex-1 min-w-0 overflow-x-auto`. If the
+      // *outer* header also scrolled as one unit, a narrow window would push the right
+      // section out of the visible area entirely (reachable only by scrolling the whole
+      // ribbon sideways, with the 3D viewport filling the space underneath it instead) —
+      // which is what made the Theme toggle look covered by the design canvas. Keeping
+      // the overflow scoped to the middle row guarantees the right-hand controls are
+      // always visible.
+      className={`h-14 border-b px-3 sm:px-4 flex items-center justify-between gap-2 select-none z-20 shrink-0 transition-colors backdrop-blur-xl ${
         isLight
           ? 'bg-slate-100/80 border-slate-300 text-slate-900 shadow-sm'
           : isBlueprint
@@ -397,7 +418,27 @@ export const Header: React.FC<HeaderProps> = ({
         )}
       </div>
 
+      {/* Collapse/Expand toggle for the feature-studio toolbar row below. Every action in
+          that row duplicates a Quick Commands (⌘K) entry, so hiding it never removes
+          functionality — it just reclaims ribbon space when the user wants it back. */}
+      {onToggleToolbarExpanded && (
+        <QuickTooltip content={isToolbarExpanded ? 'Collapse Toolbar Ribbon' : 'Expand Toolbar Ribbon'}>
+          <button
+            id="btn_header_toolbar_collapse"
+            onClick={onToggleToolbarExpanded}
+            className={`shrink-0 flex items-center justify-center p-1.5 rounded-lg border transition-all ${
+              isLight
+                ? 'bg-white hover:bg-slate-50 border-slate-300 text-slate-500 hover:text-slate-900'
+                : 'bg-zinc-950 hover:bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-zinc-200'
+            }`}
+          >
+            {isToolbarExpanded ? <ChevronLeft className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+          </button>
+        </QuickTooltip>
+      )}
+
       {/* Middle: Studio Viewport Controls & Feature Studios */}
+      {isToolbarExpanded ? (
       <div className="flex-1 min-w-0 flex items-center gap-1 sm:gap-1.5 overflow-x-auto py-1 scrollbar-none">
         {/* Render Shader Mode Selector */}
         <div className={`hidden 2xl:flex items-center rounded-lg p-0.5 border text-xs ${isLight ? 'bg-slate-200 border-slate-300' : 'bg-zinc-950 border-zinc-800'}`}>
@@ -834,6 +875,25 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         </QuickTooltip>
       </div>
+      ) : (
+        // Collapsed placeholder — a small, unmissable affordance that the toolbar row is
+        // intentionally hidden (not broken/missing), with a one-click way back. Keeps the
+        // ribbon slim without ever hiding the Theme Switcher / Undo-Redo / Export controls
+        // in the Right section, which stay visible in both states.
+        <div className="flex-1 min-w-0 flex items-center">
+          <button
+            onClick={onToggleToolbarExpanded}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium transition-all ${
+              isLight
+                ? 'bg-white hover:bg-slate-50 border-slate-300 text-slate-500 hover:text-slate-900'
+                : 'bg-zinc-950 hover:bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-zinc-200'
+            }`}
+          >
+            <Wrench className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Toolbar Ribbon Collapsed</span>
+          </button>
+        </div>
+      )}
 
       {/* Right: Auto-Save Status, Theme Switcher, Undo/Redo & Model Export / Import Menu */}
       <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">

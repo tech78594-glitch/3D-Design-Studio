@@ -427,6 +427,28 @@ export default function App() {
   // voice command) — see Viewport3D's resetViewSignal prop.
   const [resetViewSignal, setResetViewSignal] = useState(0);
 
+  // Whether the header's row of feature-studio shortcut buttons (Versioning, BOM,
+  // Measure, Clash Detection, etc.) is shown or collapsed to a slim pill. Every one of
+  // those actions is also reachable via the Quick Commands palette, so this is purely a
+  // "reclaim ribbon space" preference — remembered across sessions like the other studio
+  // prefs (auto-save interval, theme) so collapsing it once doesn't need to be redone
+  // every reload.
+  const [isHeaderToolbarExpanded, setIsHeaderToolbarExpanded] = useState<boolean>(() => {
+    try {
+      const stored = localStorage.getItem('cad_studio_header_toolbar_expanded');
+      return stored === null ? true : stored === 'true';
+    } catch {
+      return true;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem('cad_studio_header_toolbar_expanded', String(isHeaderToolbarExpanded));
+    } catch {
+      // Best-effort only — a private/locked-down browser context shouldn't break the UI.
+    }
+  }, [isHeaderToolbarExpanded]);
+
   // Active objects according to section
   const currentObjects = section === 'technology' ? techObjects : buildingObjects;
   const setObjectsForCurrentSection = (updater: (prev: CADObject[]) => CADObject[]) => {
@@ -1019,6 +1041,8 @@ export default function App() {
         onOpenVoiceCommand={() => setIsVoiceCommandOpen(true)}
         autoSaveIntervalPref={autoSaveIntervalPref}
         onChangeAutoSaveIntervalPref={handleChangeAutoSaveIntervalPref}
+        isToolbarExpanded={isHeaderToolbarExpanded}
+        onToggleToolbarExpanded={() => setIsHeaderToolbarExpanded(prev => !prev)}
       />
 
       {/* Main 3-Column Studio Workspace */}
