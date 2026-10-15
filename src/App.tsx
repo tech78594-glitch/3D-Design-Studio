@@ -276,49 +276,10 @@ export default function App() {
   ]);
   const [activeMeasureMode, setActiveMeasureMode] = useState<MeasureMode>('point_to_point');
 
-  // Collaborative Spatial 3D Comments & Pin Annotations
-  const [comments, setComments] = useState<CADCommentPin[]>([
-    {
-      id: 'comment_init_1',
-      author: 'Lead DFM Engineer',
-      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=80&auto=format&fit=crop&q=80',
-      title: 'Earcup Thermal Venting Path Validation',
-      body: 'Verified beryllium driver back-vent clearance against the anodized aluminum earcup shell. 0.4mm air gap maintained across the CNC perimeter.',
-      position: [-75, -8, 0],
-      normal: [-1, 0, 0],
-      targetPartId: 'part_earcup_left',
-      targetPartName: 'CNC Acoustic Aluminum Earcup Shell (Left)',
-      category: 'thermal',
-      priority: 'high',
-      status: 'in_review',
-      createdAt: new Date(Date.now() - 7200000).toISOString(),
-      replies: [
-        {
-          id: 'reply_init_1',
-          author: 'CAD Modeler',
-          avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&auto=format&fit=crop&q=80',
-          body: 'Added fillet chamfers to reduce turbulence around the driver vent perimeter.',
-          createdAt: new Date(Date.now() - 3600000).toISOString(),
-        },
-      ],
-    },
-    {
-      id: 'comment_init_2',
-      author: 'Acoustics Architect',
-      avatarUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=80&auto=format&fit=crop&q=80',
-      title: 'Telescoping Slider Travel Range',
-      body: 'Slider extension capped at 15mm per side beyond the headband arch to fit the 5th-to-95th percentile head circumference range.',
-      position: [-66, 42, 0],
-      normal: [-1, 0, 0],
-      targetPartId: 'part_slider_left',
-      targetPartName: 'CNC Anodized Aluminum Slider (Left)',
-      category: 'geometry',
-      priority: 'medium',
-      status: 'resolved',
-      createdAt: new Date(Date.now() - 14400000).toISOString(),
-      replies: [],
-    },
-  ]);
+  // Collaborative Spatial 3D Comments & Pin Annotations — starts empty; the two demo
+  // review pins that used to ship here (thermal venting / slider travel) were removed
+  // since they were just sample markup, not real review data.
+  const [comments, setComments] = useState<CADCommentPin[]>([]);
 
   // Design Versioning & Revisions
   const [versionHistory, setVersionHistory] = useState<DesignVersion[]>([
@@ -514,11 +475,10 @@ export default function App() {
     saveAutoSaveIntervalPref(pref);
   };
 
-  // Restore state from auto-saved session data
-  const handleRestoreFromAutoSave = (customData?: AutoSaveData | null) => {
-    const dataToLoad = customData || loadStudioSession();
-    if (!dataToLoad) return;
-
+  // Applies a saved session payload onto live state. Shared by the manual "Restore Last
+  // Saved Session" action and the silent auto-restore-on-load effect below, so both stay
+  // in sync with exactly the same fields.
+  const applySavedSessionData = (dataToLoad: AutoSaveData) => {
     if (dataToLoad.techObjects && Array.isArray(dataToLoad.techObjects)) {
       setTechObjects(dataToLoad.techObjects);
     }
@@ -558,10 +518,35 @@ export default function App() {
     if (dataToLoad.themeMode) {
       setThemeMode(dataToLoad.themeMode);
     }
+  };
+
+  // Restore state from auto-saved session data (manual "Restore Last Saved Session" action)
+  const handleRestoreFromAutoSave = (customData?: AutoSaveData | null) => {
+    const dataToLoad = customData || loadStudioSession();
+    if (!dataToLoad) return;
+
+    applySavedSessionData(dataToLoad);
 
     confetti({ particleCount: 35, spread: 50, origin: { y: 0.1 } });
     recordHistory();
   };
+
+  // Auto-restore the last saved session on page load. Previously this only happened when
+  // the user manually clicked "Restore Last Saved Session" from the save menu, so a plain
+  // refresh (or just reopening the app) silently reset everything back to the hardcoded
+  // starter demo project — including re-introducing clashes/comments that had already been
+  // cleaned up. Now, if a saved session exists, it's applied automatically and the home
+  // page is skipped so the workspace resumes exactly where it left off.
+  useEffect(() => {
+    const savedSession = loadStudioSession();
+    if (!savedSession) return;
+
+    applySavedSessionData(savedSession);
+    setShowHomePage(false);
+    // Run once on mount only — this is a one-time "resume last session" check, not a
+    // reactive sync (the autosave effect already keeps storage updated going forward).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleForceSave = () => {
     triggerImmediateSave();

@@ -46,7 +46,7 @@ export const BUILDING_PRESETS: Record<string, BuildingPresetData> = {
         category: 'interior',
         section: 'building',
         primitive: 'slab',
-        position: [8, -0.05, 4],
+        position: [8, 0.55, 4],
         rotation: [0, 0, 0],
         scale: [1, 1, 1],
         dimensions: { width: 8, height: 0.1, depth: 14 },
