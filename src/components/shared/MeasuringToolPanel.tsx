@@ -16,7 +16,14 @@ import {
   Copy,
   Check,
   CheckCircle2,
+  CircleDot,
 } from 'lucide-react';
+
+// Primitives whose `dimensions.radius` field is a meaningful true radius, for the
+// AutoCAD DIMRADIUS/DIMDIAMETER-style "Dimension Radius" shortcut below.
+const CIRCULAR_PRIMITIVES = new Set([
+  'cylinder', 'column', 'battery_cell', 'screw_head', 'sphere', 'torus', 'cone', 'camera_lens', 'custom_revolve',
+]);
 
 interface MeasuringToolPanelProps {
   objects: CADObject[];
@@ -71,6 +78,37 @@ export const MeasuringToolPanel: React.FC<MeasuringToolPanelProps> = ({
 
     onUpdateMeasurements([...measurements, newM]);
   };
+
+  // AutoCAD DIMRADIUS/DIMDIAMETER-style shortcut: dimension the selected circular part
+  // directly from its own radius field instead of picking two points on it.
+  const handleDimensionRadius = () => {
+    if (!selectedObject) return;
+    const radius = selectedObject.dimensions?.radius ?? (selectedObject.dimensions?.width ?? 10) / 2;
+    const pos = selectedObject.position;
+    const edgePoint: [number, number, number] = [pos[0] + radius, pos[1], pos[2]];
+
+    const newM: CADMeasurement = {
+      id: `meas_${Date.now()}`,
+      name: `${selectedObject.name} Radius`,
+      mode: 'radius_diameter',
+      pointA: pos,
+      pointB: edgePoint,
+      distanceMm: parseFloat(radius.toFixed(2)),
+      deltaX: radius,
+      deltaY: 0,
+      deltaZ: 0,
+      radiusMm: parseFloat(radius.toFixed(2)),
+      diameterMm: parseFloat((radius * 2).toFixed(2)),
+      color: '#a78bfa',
+      visible: true,
+      notes: `R${radius.toFixed(2)}mm / ⌀${(radius * 2).toFixed(2)}mm`,
+      createdAt: new Date().toLocaleTimeString(),
+    };
+
+    onUpdateMeasurements([...measurements, newM]);
+  };
+
+  const isSelectedObjectCircular = selectedObject && CIRCULAR_PRIMITIVES.has(selectedObject.primitive);
 
   // Toggle Measurement Visibility
   const handleToggleVisible = (id: string) => {
@@ -196,6 +234,18 @@ export const MeasuringToolPanel: React.FC<MeasuringToolPanelProps> = ({
             <span>Measure Bounds of "{selectedObject.name}"</span>
           </button>
         )}
+
+        {/* AutoCAD DIMRADIUS/DIMDIAMETER-style shortcut for circular/cylindrical parts */}
+        {isSelectedObjectCircular && (
+          <button
+            id="btn_dimension_radius"
+            onClick={handleDimensionRadius}
+            className="w-full flex items-center justify-center gap-2 p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-violet-700/50 text-violet-200 text-xs font-semibold transition-colors"
+          >
+            <CircleDot className="w-3.5 h-3.5 text-violet-400" />
+            <span>Dimension Radius/Diameter of "{selectedObject!.name}"</span>
+          </button>
+        )}
       </div>
 
       {/* Measurement List */}
@@ -286,6 +336,13 @@ export const MeasuringToolPanel: React.FC<MeasuringToolPanelProps> = ({
             {m.angleDeg !== undefined && (
               <div className="text-[11px] font-mono text-amber-400">
                 Angular Incline: <strong>{m.angleDeg.toFixed(1)}°</strong>
+              </div>
+            )}
+
+            {m.mode === 'radius_diameter' && m.radiusMm !== undefined && (
+              <div className="text-[11px] font-mono text-violet-400">
+                Radius: <strong>R{m.radiusMm.toFixed(2)}mm</strong> &nbsp;|&nbsp; Diameter:{' '}
+                <strong>⌀{(m.diameterMm ?? m.radiusMm * 2).toFixed(2)}mm</strong>
               </div>
             )}
           </div>

@@ -21,6 +21,7 @@ import {
   StudioThemeMode,
   RenderMode,
   LightingPreset,
+  CADBlockDefinition,
 } from '../types/cad';
 
 export const AUTOSAVE_STORAGE_KEY = 'cad_studio_autosave_v2';
@@ -78,6 +79,7 @@ export interface AutoSavePayload {
   measurements: CADMeasurement[];
   comments: CADCommentPin[];
   versionHistory: DesignVersion[];
+  blocks?: CADBlockDefinition[];
   stats?: {
     totalParts: number;
     byteSizeEstimate: number;
@@ -125,6 +127,7 @@ export function saveStudioSession(
       measurements: data.measurements || [],
       comments: data.comments || [],
       versionHistory: data.versionHistory || [],
+      blocks: data.blocks || [],
       stats: {
         totalParts,
         byteSizeEstimate: 0,
@@ -236,6 +239,7 @@ export interface UseAutoSaveOptions {
   measurements?: CADMeasurement[];
   comments?: CADCommentPin[];
   versionHistory?: DesignVersion[];
+  blocks?: CADBlockDefinition[];
   themeMode?: StudioThemeMode;
   renderMode?: RenderMode;
   lightingPreset?: LightingPreset;
@@ -260,6 +264,7 @@ export function useAutoSave(options: UseAutoSaveOptions) {
     measurements = [],
     comments = [],
     versionHistory = [],
+    blocks = [],
     themeMode = 'dark',
     renderMode = 'shaded',
     lightingPreset = 'studio',
@@ -298,6 +303,7 @@ export function useAutoSave(options: UseAutoSaveOptions) {
         measurements,
         comments,
         versionHistory,
+        blocks,
         themeMode,
         renderMode,
         lightingPreset,
@@ -330,6 +336,7 @@ export function useAutoSave(options: UseAutoSaveOptions) {
     measurements,
     comments,
     versionHistory,
+    blocks,
     themeMode,
     renderMode,
     lightingPreset,
@@ -376,6 +383,7 @@ export function useAutoSave(options: UseAutoSaveOptions) {
     measurements,
     comments,
     versionHistory,
+    blocks,
     themeMode,
     debounceMs,
     performSave,

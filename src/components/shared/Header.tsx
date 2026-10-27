@@ -59,6 +59,12 @@ import {
   ChevronLeft,
   ChevronRight,
   Wrench,
+  Move,
+  Crosshair,
+  Grid3x3,
+  PenSquare,
+  Combine,
+  Component,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { QuickTooltip } from './QuickTooltip';
@@ -78,6 +84,12 @@ interface HeaderProps {
   onToggleGrid: () => void;
   snapEnabled: boolean;
   onToggleSnap: () => void;
+  orthoEnabled?: boolean;
+  onToggleOrtho?: () => void;
+  onOpenPrecisionSettings?: () => void;
+  onOpenSketchStudio?: () => void;
+  onOpenBlockLibrary?: () => void;
+  onOpenBooleanDxfStudio?: () => void;
   objects: CADObject[];
   onImportScene: (jsonStr: string) => void;
   onUndo: () => void;
@@ -154,6 +166,12 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleGrid,
   snapEnabled,
   onToggleSnap,
+  orthoEnabled,
+  onToggleOrtho,
+  onOpenPrecisionSettings,
+  onOpenSketchStudio,
+  onOpenBlockLibrary,
+  onOpenBooleanDxfStudio,
   objects,
   onImportScene,
   onUndo,
@@ -832,6 +850,60 @@ export const Header: React.FC<HeaderProps> = ({
           </QuickTooltip>
         )}
 
+        {/* AutoCAD-style 2D Sketch -> Extrude/Revolve Solid Modeling */}
+        {onOpenSketchStudio && (
+          <QuickTooltip content="Sketch & Solid Studio: draw a 2D profile, then Extrude/Revolve it into a solid">
+            <button
+              id="btn_header_sketch_studio"
+              onClick={onOpenSketchStudio}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all border shadow-sm ${
+                isLight
+                  ? 'bg-violet-50 hover:bg-violet-100 border-violet-300 text-violet-800'
+                  : 'bg-violet-950/30 hover:bg-violet-900/40 border-violet-500/40 text-violet-300 hover:text-violet-200'
+              }`}
+            >
+              <PenSquare className="w-3.5 h-3.5 text-violet-400" />
+              <span className="hidden xl:inline">Sketch Solid</span>
+            </button>
+          </QuickTooltip>
+        )}
+
+        {/* AutoCAD BLOCK/INSERT-style reusable component library */}
+        {onOpenBlockLibrary && (
+          <QuickTooltip content="Block Library: save parts/assemblies as reusable blocks, then insert them anywhere">
+            <button
+              id="btn_header_block_library"
+              onClick={onOpenBlockLibrary}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all border shadow-sm ${
+                isLight
+                  ? 'bg-teal-50 hover:bg-teal-100 border-teal-300 text-teal-800'
+                  : 'bg-teal-950/30 hover:bg-teal-900/40 border-teal-500/40 text-teal-300 hover:text-teal-200'
+              }`}
+            >
+              <Component className="w-3.5 h-3.5 text-teal-400" />
+              <span className="hidden xl:inline">Blocks</span>
+            </button>
+          </QuickTooltip>
+        )}
+
+        {/* Boolean Union/Subtract/Intersect + AutoCAD DXF Import/Export */}
+        {onOpenBooleanDxfStudio && (
+          <QuickTooltip content="Boolean Solid Ops (Union/Subtract/Intersect) & DXF Import/Export">
+            <button
+              id="btn_header_boolean_dxf"
+              onClick={onOpenBooleanDxfStudio}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all border shadow-sm ${
+                isLight
+                  ? 'bg-rose-50 hover:bg-rose-100 border-rose-300 text-rose-800'
+                  : 'bg-rose-950/30 hover:bg-rose-900/40 border-rose-500/40 text-rose-300 hover:text-rose-200'
+              }`}
+            >
+              <Combine className="w-3.5 h-3.5 text-rose-400" />
+              <span className="hidden xl:inline">Boolean/DXF</span>
+            </button>
+          </QuickTooltip>
+        )}
+
         {/* Smart Edge Selection Mode Toggle Button */}
         {onToggleEdgeSelection && (
           <QuickTooltip content="Smart Edge Selection & Fillet/Chamfer Inspector" shortcut="E">
@@ -887,6 +959,63 @@ export const Header: React.FC<HeaderProps> = ({
             <Grid className="w-3.5 h-3.5" />
           </button>
         </QuickTooltip>
+
+        {/* AutoCAD-style SNAP toggle (grid snap for positioning/dimensioning) */}
+        <QuickTooltip content={snapEnabled ? 'Disable Grid Snap (SNAP)' : 'Enable Grid Snap (SNAP)'} shortcut="S">
+          <button
+            id="btn_header_snap_toggle"
+            onClick={onToggleSnap}
+            className={`p-1.5 rounded-lg border text-xs transition-all ${
+              snapEnabled
+                ? isLight
+                  ? 'bg-slate-200 border-slate-400 text-slate-900'
+                  : 'bg-zinc-800 border-zinc-700 text-zinc-200'
+                : isLight
+                ? 'bg-white border-slate-300 text-slate-500 hover:text-slate-900'
+                : 'bg-zinc-950 border-zinc-800 text-zinc-500 hover:text-zinc-300'
+            }`}
+          >
+            <Grid3x3 className="w-3.5 h-3.5" />
+          </button>
+        </QuickTooltip>
+
+        {/* AutoCAD-style ORTHO toggle (constrain snap-to-nearest-part to one axis) */}
+        {onToggleOrtho && (
+          <QuickTooltip content={orthoEnabled ? 'Disable Ortho Mode (ORTHO)' : 'Enable Ortho Mode (ORTHO)'} shortcut="O">
+            <button
+              id="btn_header_ortho_toggle"
+              onClick={onToggleOrtho}
+              className={`p-1.5 rounded-lg border text-xs transition-all ${
+                orthoEnabled
+                  ? isLight
+                    ? 'bg-slate-200 border-slate-400 text-slate-900'
+                    : 'bg-zinc-800 border-zinc-700 text-zinc-200'
+                  : isLight
+                  ? 'bg-white border-slate-300 text-slate-500 hover:text-slate-900'
+                  : 'bg-zinc-950 border-zinc-800 text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              <Move className="w-3.5 h-3.5" />
+            </button>
+          </QuickTooltip>
+        )}
+
+        {/* Precision Drafting Settings (grid size, object-snap types, tolerance) */}
+        {onOpenPrecisionSettings && (
+          <QuickTooltip content="Precision Drafting Settings (Grid Size, Object Snap, Tolerance)">
+            <button
+              id="btn_header_precision_settings"
+              onClick={onOpenPrecisionSettings}
+              className={`p-1.5 rounded-lg border text-xs transition-all ${
+                isLight
+                  ? 'bg-white hover:bg-slate-50 border-slate-300 text-slate-500 hover:text-slate-900'
+                  : 'bg-zinc-950 hover:bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-zinc-200'
+              }`}
+            >
+              <Crosshair className="w-3.5 h-3.5" />
+            </button>
+          </QuickTooltip>
+        )}
       </div>
       ) : (
         // Collapsed placeholder — a small, unmissable affordance that the toolbar row is

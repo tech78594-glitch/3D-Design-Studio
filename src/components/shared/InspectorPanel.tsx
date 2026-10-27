@@ -1,6 +1,7 @@
 import React from 'react';
-import { CADObject, DesignSection, CADMaterial } from '../../types/cad';
+import { CADObject, DesignSection, CADMaterial, CADPrecisionSettings, DEFAULT_PRECISION_SETTINGS } from '../../types/cad';
 import { MATERIAL_PRESETS } from '../../utils/materials';
+import { snapPointToGrid, collectSnapCandidates, findNearestSnapCandidate } from '../../utils/precisionSnap';
 import {
   Sliders,
   Move,
@@ -19,6 +20,8 @@ import {
   Layers,
   Compass,
   Move3d,
+  Magnet,
+  Grid3x3,
 } from 'lucide-react';
 
 interface InspectorPanelProps {
@@ -30,6 +33,11 @@ interface InspectorPanelProps {
   onOpenMaterialLibrary?: () => void;
   onOpenAutoOrientation?: () => void;
   onOpenARPreview?: () => void;
+  // AutoCAD-style precision drafting: snap the selected part's position to the active
+  // grid, or to the nearest endpoint/midpoint/center of another part (OSNAP). Optional so
+  // existing callers that don't pass these props keep working unchanged.
+  allObjects?: CADObject[];
+  precisionSettings?: CADPrecisionSettings;
 }
 
 export const InspectorPanel: React.FC<InspectorPanelProps> = ({
@@ -41,6 +49,8 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
   onOpenMaterialLibrary,
   onOpenAutoOrientation,
   onOpenARPreview,
+  allObjects,
+  precisionSettings,
 }) => {
   const isTouchDevice =
     typeof window !== 'undefined' && (window.matchMedia?.('(pointer: coarse)').matches ?? 'ontouchstart' in window);
@@ -107,6 +117,26 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
     ];
     newPos[axisIndex] = val;
     onUpdateObject({ ...selectedObject, position: newPos });
+  };
+
+  const effectivePrecision = precisionSettings || DEFAULT_PRECISION_SETTINGS;
+
+  // AutoCAD SNAP: round the current position to the nearest grid intersection.
+  const handleSnapToGrid = () => {
+    const snapped = snapPointToGrid(selectedObject.position, effectivePrecision.gridSizeMm || 1);
+    onUpdateObject({ ...selectedObject, position: snapped });
+  };
+
+  // AutoCAD OSNAP: jump the part's position onto the nearest endpoint/midpoint/center of
+  // any other part in the scene (within a generous search tolerance, since this is an
+  // explicit "find and snap" action, not a live drag-tolerance check).
+  const handleSnapToNearestPart = () => {
+    if (!allObjects) return;
+    const candidates = collectSnapCandidates(allObjects, { ...effectivePrecision, objectSnapEnabled: true }, selectedObject.id);
+    const nearest = findNearestSnapCandidate(selectedObject.position, candidates, 100000);
+    if (nearest) {
+      onUpdateObject({ ...selectedObject, position: nearest.point });
+    }
   };
 
   const handleRotationChange = (axisIndex: 0 | 1 | 2, degVal: number) => {
@@ -206,10 +236,32 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
 
       {/* 1. Transform Position */}
       <div className="bg-zinc-950/60 border border-zinc-800 p-3 rounded-xl space-y-2 shadow-sm">
-        <span className="text-[11px] font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
-          <Move className="w-3.5 h-3.5 text-blue-400" />
-          Position ({section === 'technology' ? 'mm' : 'm'})
-        </span>
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+            <Move className="w-3.5 h-3.5 text-blue-400" />
+            Position ({section === 'technology' ? 'mm' : 'm'})
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              id="btn_inspector_snap_grid"
+              onClick={handleSnapToGrid}
+              title={`Snap to Grid (${effectivePrecision.gridSizeMm}${section === 'technology' ? 'mm' : 'm'})`}
+              className="p-1 rounded-lg text-zinc-500 hover:text-cyan-300 hover:bg-zinc-800 transition-colors"
+            >
+              <Grid3x3 className="w-3.5 h-3.5" />
+            </button>
+            {allObjects && allObjects.length > 1 && (
+              <button
+                id="btn_inspector_snap_nearest"
+                onClick={handleSnapToNearestPart}
+                title="Snap to Nearest Part (OSNAP: endpoint/midpoint/center)"
+                className="p-1 rounded-lg text-zinc-500 hover:text-cyan-300 hover:bg-zinc-800 transition-colors"
+              >
+                <Magnet className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
 
         <div className="grid grid-cols-3 gap-2 text-xs font-mono">
           {(['X', 'Y', 'Z'] as const).map((axis, i) => (

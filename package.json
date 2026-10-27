@@ -26,6 +26,7 @@
     "react-dom": "^19.0.1",
     "recharts": "^3.10.1",
     "three": "^0.185.1",
+    "three-bvh-csg": "^0.0.18",
     "vite": "^6.2.3"
   },
   "devDependencies": {

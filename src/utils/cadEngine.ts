@@ -353,6 +353,61 @@ export function createCADGeometry(obj: CADObject): THREE.BufferGeometry {
       return geom;
     }
 
+    // --- AutoCAD/Fusion-style sketch -> solid primitives (see SketchExtrudeStudio) ---
+    case 'custom_extrude': {
+      const profile = obj.sketchProfile;
+      if (profile && profile.points.length >= 3) {
+        const shape = new THREE.Shape(profile.points.map(([x, y]) => new THREE.Vector2(x, y)));
+        const geom = new THREE.ExtrudeGeometry(shape, {
+          depth: d.depth || 10,
+          bevelEnabled: false,
+          steps: 1,
+        });
+        geom.center();
+        return geom;
+      }
+      // Fallback if the sketch somehow has too few points to form a solid
+      return new THREE.BoxGeometry(d.width || 10, d.height || 10, d.depth || 10);
+    }
+
+    case 'custom_revolve': {
+      const profile = obj.sketchProfile;
+      if (profile && profile.points.length >= 2) {
+        // LatheGeometry revolves around the local Y axis and requires non-negative X
+        // (radius) values for every profile point.
+        const latheProfile = profile.points.map(
+          ([x, y]) => new THREE.Vector2(Math.max(0, x), y)
+        );
+        const segments = Math.max(3, d.segments || 32);
+        const angleRad = ((profile.revolveAngleDeg ?? 360) * Math.PI) / 180;
+        const geom = new THREE.LatheGeometry(latheProfile, segments, 0, angleRad);
+        geom.center();
+        return geom;
+      }
+      return new THREE.CylinderGeometry(d.radius || 5, d.radius || 5, d.height || 10, 32);
+    }
+
+    // --- Baked arbitrary mesh data: boolean-operation results & DXF-imported solids ---
+    case 'custom_mesh': {
+      const data = obj.customGeometryData;
+      if (data && data.positions.length >= 9) {
+        const geom = new THREE.BufferGeometry();
+        geom.setAttribute('position', new THREE.Float32BufferAttribute(data.positions, 3));
+        if (data.indices && data.indices.length > 0) {
+          geom.setIndex(data.indices);
+        }
+        if (data.normals && data.normals.length === data.positions.length) {
+          geom.setAttribute('normal', new THREE.Float32BufferAttribute(data.normals, 3));
+        } else {
+          geom.computeVertexNormals();
+        }
+        geom.computeBoundingBox();
+        geom.computeBoundingSphere();
+        return geom;
+      }
+      return new THREE.BoxGeometry(d.width || 10, d.height || 10, d.depth || 10);
+    }
+
     default:
       return new THREE.BoxGeometry(d.width || 10, d.height || 10, d.depth || 10);
   }

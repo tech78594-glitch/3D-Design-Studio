@@ -795,6 +795,8 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
         mesh.receiveShadow = true;
         mesh.userData.geomSourceDims = obj.dimensions;
         mesh.userData.geomSourcePrimitive = obj.primitive;
+        mesh.userData.geomSourceSketch = obj.sketchProfile;
+        mesh.userData.geomSourceCustomMesh = obj.customGeometryData;
         mesh.userData.matSourceMaterial = obj.material;
         mesh.userData.matSourceRenderMode = renderMode;
         mesh.userData.matSourceThermal = deviceConfig.thermalSimActive;
@@ -805,12 +807,17 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
         meshMap.set(obj.id, mesh);
       } else {
         const geometryChanged =
-          mesh.userData.geomSourceDims !== obj.dimensions || mesh.userData.geomSourcePrimitive !== obj.primitive;
+          mesh.userData.geomSourceDims !== obj.dimensions ||
+          mesh.userData.geomSourcePrimitive !== obj.primitive ||
+          mesh.userData.geomSourceSketch !== obj.sketchProfile ||
+          mesh.userData.geomSourceCustomMesh !== obj.customGeometryData;
         if (geometryChanged) {
           mesh.geometry.dispose();
           mesh.geometry = createCADGeometry(obj);
           mesh.userData.geomSourceDims = obj.dimensions;
           mesh.userData.geomSourcePrimitive = obj.primitive;
+          mesh.userData.geomSourceSketch = obj.sketchProfile;
+          mesh.userData.geomSourceCustomMesh = obj.customGeometryData;
         }
 
         const materialChanged =

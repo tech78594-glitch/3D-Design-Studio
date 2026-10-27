@@ -28,6 +28,8 @@ import {
   CADCommentPin,
   MeasureMode,
   StudioThemeMode,
+  CADPrecisionSettings,
+  CADBlockDefinition,
 } from './types/cad';
 import { DEVICE_PRESETS } from './components/tech/DevicePresets';
 import { BUILDING_PRESETS } from './components/building/BuildingPresets';
@@ -58,6 +60,10 @@ import { HotkeyLegendModal } from './components/shared/HotkeyLegendModal';
 import { SketchAnnotationStudio } from './components/shared/SketchAnnotationStudio';
 import { ARPreviewModal } from './components/shared/ARPreviewModal';
 import { MassCalculatorModal } from './components/shared/MassCalculatorModal';
+import { PrecisionSettingsModal } from './components/shared/PrecisionSettingsModal';
+import { SketchExtrudeStudio } from './components/shared/SketchExtrudeStudio';
+import { BlockLibraryModal } from './components/shared/BlockLibraryModal';
+import { BooleanDxfStudio } from './components/shared/BooleanDxfStudio';
 import { SmartEdgeInspectorPanel } from './components/shared/SmartEdgeInspectorPanel';
 import { ExplodedViewEditorModal } from './components/shared/ExplodedViewEditorModal';
 import { ProjectCollaborationChatModal } from './components/shared/ProjectCollaborationChatModal';
@@ -240,6 +246,40 @@ export default function App() {
   const [gridVisible, setGridVisible] = useState<boolean>(true);
   const [snapEnabled, setSnapEnabled] = useState<boolean>(true);
   const [snapStep, setSnapStep] = useState<number>(1.0);
+
+  // AutoCAD-style precision drafting: object-snap sub-toggles, ortho mode, and snap
+  // tolerance. Combined with the existing snapEnabled/snapStep (grid snap on/off + grid
+  // size) into one settings object passed to the Inspector, Sketch Studio, etc.
+  const [objectSnapEnabled, setObjectSnapEnabled] = useState<boolean>(true);
+  const [snapEndpoint, setSnapEndpoint] = useState<boolean>(true);
+  const [snapMidpoint, setSnapMidpoint] = useState<boolean>(true);
+  const [snapCenter, setSnapCenter] = useState<boolean>(true);
+  const [snapToleranceMm, setSnapToleranceMm] = useState<number>(3);
+  const [orthoEnabled, setOrthoEnabled] = useState<boolean>(false);
+  const [isPrecisionSettingsOpen, setIsPrecisionSettingsOpen] = useState(false);
+  const precisionSettings: CADPrecisionSettings = useMemo(
+    () => ({
+      gridSnapEnabled: snapEnabled,
+      gridSizeMm: snapStep,
+      objectSnapEnabled,
+      snapEndpoint,
+      snapMidpoint,
+      snapCenter,
+      snapToleranceMm,
+      orthoEnabled,
+    }),
+    [snapEnabled, snapStep, objectSnapEnabled, snapEndpoint, snapMidpoint, snapCenter, snapToleranceMm, orthoEnabled]
+  );
+
+  // AutoCAD-style 2D Sketch -> Extrude/Revolve Solid Studio
+  const [isSketchStudioOpen, setIsSketchStudioOpen] = useState(false);
+
+  // AutoCAD BLOCK/INSERT-style reusable component library
+  const [isBlockLibraryOpen, setIsBlockLibraryOpen] = useState(false);
+  const [blocks, setBlocks] = useState<CADBlockDefinition[]>([]);
+
+  // Boolean solid operations (Union/Subtract/Intersect) + DXF Import/Export
+  const [isBooleanDxfStudioOpen, setIsBooleanDxfStudioOpen] = useState(false);
 
   // 3D Measuring Tool State
   const [measurements, setMeasurements] = useState<CADMeasurement[]>([
@@ -466,6 +506,7 @@ export default function App() {
     measurements,
     comments,
     versionHistory,
+    blocks,
     themeMode,
     debounceMs: getAutoSaveIntervalMs(autoSaveIntervalPref) || 30000,
   });
@@ -514,6 +555,9 @@ export default function App() {
     }
     if (dataToLoad.versionHistory && Array.isArray(dataToLoad.versionHistory)) {
       setVersionHistory(dataToLoad.versionHistory);
+    }
+    if (dataToLoad.blocks && Array.isArray(dataToLoad.blocks)) {
+      setBlocks(dataToLoad.blocks);
     }
     if (dataToLoad.themeMode) {
       setThemeMode(dataToLoad.themeMode);
@@ -743,6 +787,44 @@ export default function App() {
     handleAddObject(duplicate);
   };
 
+  // AutoCAD BLOCK/INSERT-style reusable component library
+  const handleCreateBlock = (block: CADBlockDefinition) => {
+    setBlocks(prev => [...prev, block]);
+  };
+
+  const handleDeleteBlock = (blockId: string) => {
+    setBlocks(prev => prev.filter(b => b.id !== blockId));
+  };
+
+  const handleInsertBlock = (block: CADBlockDefinition) => {
+    const newObjects = block.objects.map((o, i) => ({
+      ...o,
+      id: `${block.id}_insert_${Date.now()}_${i}`,
+      name: o.id === 'block_part' ? block.name : o.name,
+    }));
+    setObjectsForCurrentSection(prev => [...prev, ...newObjects]);
+    if (newObjects.length > 0) setSelectedObjectId(newObjects[0].id);
+    setBlocks(prev => prev.map(b => (b.id === block.id ? { ...b, insertCount: b.insertCount + 1 } : b)));
+    recordHistory();
+  };
+
+  // Boolean solid operations: remove both source parts, add the combined result
+  const handleApplyBooleanResult = (resultObject: CADObject, sourceIdA: string, sourceIdB: string) => {
+    setObjectsForCurrentSection(prev => [
+      ...prev.filter(o => o.id !== sourceIdA && o.id !== sourceIdB),
+      resultObject,
+    ]);
+    setSelectedObjectId(resultObject.id);
+    recordHistory();
+  };
+
+  // DXF import: append the newly parsed solids to the current section
+  const handleImportDXFObjects = (newObjects: CADObject[]) => {
+    setObjectsForCurrentSection(prev => [...prev, ...newObjects]);
+    if (newObjects.length > 0) setSelectedObjectId(newObjects[0].id);
+    recordHistory();
+  };
+
   // Update Object Transform directly from Gizmo / Viewport
   const handleUpdateObjectTransform = (
     id: string,
@@ -968,6 +1050,12 @@ export default function App() {
         onToggleGrid={() => setGridVisible(!gridVisible)}
         snapEnabled={snapEnabled}
         onToggleSnap={() => setSnapEnabled(!snapEnabled)}
+        orthoEnabled={orthoEnabled}
+        onToggleOrtho={() => setOrthoEnabled(!orthoEnabled)}
+        onOpenPrecisionSettings={() => setIsPrecisionSettingsOpen(true)}
+        onOpenSketchStudio={() => setIsSketchStudioOpen(true)}
+        onOpenBlockLibrary={() => setIsBlockLibraryOpen(true)}
+        onOpenBooleanDxfStudio={() => setIsBooleanDxfStudioOpen(true)}
         objects={currentObjects}
         onImportScene={handleImportScene}
         onUndo={handleUndo}
@@ -1238,6 +1326,8 @@ export default function App() {
             onOpenMaterialLibrary={() => setIsMaterialModalOpen(true)}
             onOpenAutoOrientation={() => setIsAutoOrientationOpen(true)}
             onOpenARPreview={() => setIsARPreviewOpen(true)}
+            allObjects={currentObjects}
+            precisionSettings={precisionSettings}
           />
         </div>
         )}
@@ -1557,6 +1647,55 @@ export default function App() {
         }
         selectedObjectId={selectedObjectId}
         onSelectObject={setSelectedObjectId}
+      />
+
+      <PrecisionSettingsModal
+        isOpen={isPrecisionSettingsOpen}
+        onClose={() => setIsPrecisionSettingsOpen(false)}
+        gridSnapEnabled={snapEnabled}
+        onToggleGridSnap={() => setSnapEnabled(!snapEnabled)}
+        gridSizeMm={snapStep}
+        onChangeGridSize={setSnapStep}
+        objectSnapEnabled={objectSnapEnabled}
+        onToggleObjectSnap={() => setObjectSnapEnabled(!objectSnapEnabled)}
+        snapEndpoint={snapEndpoint}
+        onToggleSnapEndpoint={() => setSnapEndpoint(!snapEndpoint)}
+        snapMidpoint={snapMidpoint}
+        onToggleSnapMidpoint={() => setSnapMidpoint(!snapMidpoint)}
+        snapCenter={snapCenter}
+        onToggleSnapCenter={() => setSnapCenter(!snapCenter)}
+        snapToleranceMm={snapToleranceMm}
+        onChangeSnapTolerance={setSnapToleranceMm}
+        orthoEnabled={orthoEnabled}
+        onToggleOrtho={() => setOrthoEnabled(!orthoEnabled)}
+      />
+
+      <SketchExtrudeStudio
+        isOpen={isSketchStudioOpen}
+        onClose={() => setIsSketchStudioOpen(false)}
+        section={section}
+        precisionSettings={precisionSettings}
+        onCreateObject={handleAddObject}
+      />
+
+      <BlockLibraryModal
+        isOpen={isBlockLibraryOpen}
+        onClose={() => setIsBlockLibraryOpen(false)}
+        section={section}
+        selectedObject={selectedObject}
+        blocks={blocks}
+        onCreateBlock={handleCreateBlock}
+        onDeleteBlock={handleDeleteBlock}
+        onInsertBlock={handleInsertBlock}
+      />
+
+      <BooleanDxfStudio
+        isOpen={isBooleanDxfStudioOpen}
+        onClose={() => setIsBooleanDxfStudioOpen(false)}
+        objects={currentObjects}
+        section={section}
+        onApplyBooleanResult={handleApplyBooleanResult}
+        onImportObjects={handleImportDXFObjects}
       />
 
       {/* 11. Exploded View & Disassembly Sequence Editor Modal */}

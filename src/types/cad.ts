@@ -63,7 +63,14 @@ export type ShapePrimitive =
   | 'column'
   | 'roof_pitched'
   | 'solar_panel'
-  | 'furniture_desk';
+  | 'furniture_desk'
+  // AutoCAD/Fusion-style solid-modeling primitives: built from a user-drawn 2D sketch
+  // profile (see CADSketchProfile below) instead of fixed width/height/depth.
+  | 'custom_extrude'
+  | 'custom_revolve'
+  // Arbitrary baked mesh data — used for boolean (union/subtract/intersect) results and
+  // solids imported from DXF, which aren't expressible as any parametric primitive above.
+  | 'custom_mesh';
 
 export interface CADObject {
   id: string;
@@ -118,6 +125,23 @@ export interface CADObject {
     isLoadBearing?: boolean;
     thermalUValue?: number;
   };
+
+  // AutoCAD-style 2D sketch profile backing a 'custom_extrude' / 'custom_revolve'
+  // primitive (see CADSketchProfile below).
+  sketchProfile?: CADSketchProfile;
+
+  // Arbitrary baked triangle mesh backing a 'custom_mesh' primitive (boolean operation
+  // results, DXF-imported solids). Positions/normals are flat [x,y,z,x,y,z,...] arrays.
+  customGeometryData?: {
+    positions: number[];
+    normals?: number[];
+    indices?: number[];
+  };
+
+  // Set on the result of a boolean union/subtract/intersect, pointing back at the two
+  // source object ids/names that were combined (kept for traceability/BOM notes only —
+  // the sources themselves are removed from the scene when the operation is applied).
+  booleanSourceNote?: string;
 }
 
 export interface DeviceConfig {
@@ -568,7 +592,10 @@ export interface BOMReportSummary {
 }
 
 // ================= 3D MEASURING TOOL =================
-export type MeasureMode = 'point_to_point' | 'vertex_snap' | 'bounding_box' | 'angle_3point';
+// 'radius_diameter' mirrors AutoCAD's DIMRADIUS/DIMDIAMETER: dimension a circular or
+// cylindrical part (torus, cylinder, sphere, cone, etc.) directly from its own radius
+// field instead of picking two points.
+export type MeasureMode = 'point_to_point' | 'vertex_snap' | 'bounding_box' | 'angle_3point' | 'radius_diameter';
 
 export interface CADMeasurement {
   id: string;
@@ -582,6 +609,8 @@ export interface CADMeasurement {
   deltaY: number;
   deltaZ: number;
   angleDeg?: number;
+  radiusMm?: number; // For radius_diameter mode
+  diameterMm?: number; // For radius_diameter mode
   color: string;
   visible: boolean;
   notes?: string;
@@ -938,6 +967,83 @@ export interface StressAnalysisReport {
   results: PartStressResult[];
   weakestPart?: PartStressResult;
   overallVerdict: 'pass' | 'marginal' | 'fail';
+}
+
+// ================= AUTOCAD-STYLE PRECISION DRAFTING (SNAP, GRID, ORTHO) =================
+// Mirrors AutoCAD's status-bar drafting aids: SNAP (grid), OSNAP (object snap to
+// endpoints/midpoints/centers of existing geometry), and ORTHO (constrain movement to the
+// dominant axis). These apply while dragging/placing parts in the 3D viewport.
+export interface CADPrecisionSettings {
+  gridSnapEnabled: boolean;
+  gridSizeMm: number;
+  objectSnapEnabled: boolean;
+  snapEndpoint: boolean;
+  snapMidpoint: boolean;
+  snapCenter: boolean;
+  snapToleranceMm: number;
+  orthoEnabled: boolean;
+}
+
+export const DEFAULT_PRECISION_SETTINGS: CADPrecisionSettings = {
+  gridSnapEnabled: true,
+  gridSizeMm: 1,
+  objectSnapEnabled: true,
+  snapEndpoint: true,
+  snapMidpoint: true,
+  snapCenter: true,
+  snapToleranceMm: 3,
+  orthoEnabled: false,
+};
+
+export type SnapCandidateType = 'endpoint' | 'midpoint' | 'center' | 'grid';
+
+export interface SnapCandidate {
+  point: [number, number, number];
+  type: SnapCandidateType;
+  objectId?: string;
+  objectName?: string;
+}
+
+// ================= 2D SKETCH -> EXTRUDE / REVOLVE (AUTOCAD/FUSION-STYLE SOLID MODELING) =================
+// A sketch is a closed (or open, for revolve) 2D profile drawn on a work plane. "Create
+// Solid" converts it into a real CADObject using the 'custom_extrude' or 'custom_revolve'
+// primitive, whose geometry is built from this profile at render time (see
+// createCADGeometry in utils/cadEngine.ts) rather than from the fixed width/height/depth
+// box used by the parametric presets.
+export type SketchPlane = 'xy' | 'xz' | 'yz';
+
+export interface CADSketchProfile {
+  points: [number, number][]; // profile points in the sketch plane's local 2D space (mm)
+  closed: boolean;
+  revolveAngleDeg?: number; // for custom_revolve only; defaults to 360
+}
+
+export interface CADSketchDraft {
+  id: string;
+  plane: SketchPlane;
+  points: [number, number][];
+  createdAt: number;
+}
+
+// ================= REUSABLE BLOCKS (AUTOCAD BLOCK / INSERT) =================
+export interface CADBlockDefinition {
+  id: string;
+  name: string;
+  description?: string;
+  section: DesignSection;
+  objects: CADObject[]; // positions stored relative to the block's own origin (0,0,0)
+  partCount: number;
+  createdAt: string;
+  insertCount: number;
+}
+
+// ================= BOOLEAN SOLID OPERATIONS (UNION / SUBTRACT / INTERSECT) =================
+export type BooleanOperationType = 'union' | 'subtract' | 'intersect';
+
+export interface BooleanOperationResult {
+  success: boolean;
+  message: string;
+  resultObjectId?: string;
 }
 
 
